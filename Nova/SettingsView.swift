@@ -1,10 +1,15 @@
 import SwiftUI
 import WebKit
+import PhotosUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("engine") private var engineRaw = SearchEngine.google.rawValue
     @AppStorage("showShortcuts") private var showShortcuts = true
+    @ObservedObject private var bg = HomeBackgroundStore.shared
+    @AppStorage("bgDim") private var bgDim = 0.35
+    @AppStorage("bgBlur") private var bgBlur = 0.0
+    @State private var pickedItem: PhotosPickerItem?
     @State private var confirmClear = false
     @State private var cleared = false
 
@@ -25,6 +30,7 @@ struct SettingsView: View {
                     header
                     searchGroup
                     homeGroup
+                    backgroundGroup
                     privacyGroup
                     aboutGroup
                 }
@@ -34,6 +40,20 @@ struct SettingsView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onChange(of: pickedItem) { item in
+            guard let item = item else { return }
+            Task {
+                let data = try? await item.loadTransferable(type: Data.self)
+                await MainActor.run {
+                    if let data = data {
+                        bg.set(data: data)
+                    } else {
+                        bg.fail("No se pudo abrir la foto seleccionada.")
+                    }
+                    pickedItem = nil
+                }
+            }
+        }
         .confirmationDialog("¿Borrar los datos de navegación?",
                             isPresented: $confirmClear,
                             titleVisibility: .visible) {
@@ -120,6 +140,100 @@ struct SettingsView: View {
                     .tint(NovaTheme.accent)
             }
             .padding(14)
+        }
+    }
+
+    private var backgroundGroup: some View {
+        SettingsGroup("Fondo de inicio",
+                      footer: "Admite fotos y GIFs animados. Los GIFs largos se optimizan para ahorrar memoria y batería.") {
+            VStack(spacing: 14) {
+                backgroundPreview
+
+                HStack(spacing: 10) {
+                    PhotosPicker(selection: $pickedItem, matching: .images, photoLibrary: .shared()) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "photo.on.rectangle.angled")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text(bg.image == nil ? "Elegir foto o GIF" : "Cambiar fondo")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(NovaTheme.accentGradient))
+                    }
+
+                    if bg.image != nil {
+                        Button {
+                            Haptics.tap()
+                            bg.remove()
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(NovaTheme.danger)
+                                .frame(width: 44, height: 44)
+                                .background(RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .fill(NovaTheme.danger.opacity(0.14)))
+                        }
+                        .buttonStyle(PressableStyle())
+                        .accessibilityLabel("Quitar fondo")
+                    }
+                }
+
+                if let message = bg.errorMessage {
+                    Text(message)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(NovaTheme.danger)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if bg.image != nil {
+                    sliderRow(symbol: "circle.lefthalf.filled", title: "Oscurecer", value: $bgDim, range: 0...0.85)
+                    sliderRow(symbol: "drop.fill", title: "Desenfoque", value: $bgBlur, range: 0...24)
+                }
+            }
+            .padding(14)
+        }
+    }
+
+    private var backgroundPreview: some View {
+        ZStack {
+            NovaBackground()
+            HomeBackgroundView()
+            if bg.isProcessing {
+                ProgressView().tint(.white)
+            } else if bg.image == nil {
+                VStack(spacing: 6) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 22, weight: .medium))
+                    Text("Sin fondo personalizado")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .foregroundColor(NovaTheme.dim)
+            } else {
+                Text("09:41")
+                    .font(.system(size: 46, weight: .thin))
+                    .foregroundColor(.white)
+            }
+        }
+        .frame(height: 170)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(NovaTheme.stroke, lineWidth: 1))
+    }
+
+    private func sliderRow(symbol: String, title: String,
+                           value: Binding<Double>, range: ClosedRange<Double>) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(NovaTheme.accent2)
+                .frame(width: 20)
+            Text(title)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.white)
+                .frame(width: 84, alignment: .leading)
+            Slider(value: value, in: range)
+                .tint(NovaTheme.accent)
         }
     }
 

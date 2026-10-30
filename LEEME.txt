@@ -72,3 +72,12 @@ REDISENO DE INTERFAZ
   inicio/ecualizador y menu "mas" (compartir, copiar enlace, configuracion).
 - Pestanas en cuadricula de tarjetas. Inicio con saludo, reloj HH:mm y accesos con color de marca.
 - Configuracion reorganizada en grupos. Vibracion suave en las acciones principales.
+
+FONDO DE INICIO PERSONALIZADO
+=============================
+- Configuracion > "Fondo de inicio": elige una foto o un GIF animado de tu galeria
+  (selector nativo de iOS, no pide permisos). Vista previa en directo.
+- Controles de "Oscurecer" y "Desenfoque" para que el reloj y los accesos se lean bien.
+- El archivo se guarda en el dispositivo (Application Support) y se mantiene al cerrar la app.
+- Los GIFs se reducen a 640 px y 40 fotogramas como maximo para no gastar memoria.
+- Boton de papelera para volver al fondo original. Archivo: Nova/HomeBackground.swift.

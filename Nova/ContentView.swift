@@ -14,6 +14,15 @@ struct ContentView: View {
         ZStack {
             NovaBackground().ignoresSafeArea()
 
+            ZStack {
+                if model.isHome {
+                    HomeBackgroundView()
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: model.isHome)
+
             VStack(spacing: 0) {
                 topBar
                 content
@@ -23,7 +32,7 @@ struct ContentView: View {
                               openTabs: { showTabs = true },
                               openEQ: { showEQ = true },
                               eqOn: eq.s.enabled)
-                        .background(NovaTheme.bg.opacity(0.97).ignoresSafeArea(edges: .bottom))
+                        .background((model.isHome ? Color.clear : NovaTheme.bg.opacity(0.97)).ignoresSafeArea(edges: .bottom))
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
