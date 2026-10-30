@@ -35,6 +35,7 @@ struct ContentView: View {
                             .allowsHitTesting(false)
                     }
                 }
+                .overlay(alignment: .bottom) { AppDockView(model: model) }
                 .animation(.spring(response: 0.38, dampingFraction: 0.84), value: model.isHome)
                 .animation(.easeInOut(duration: 0.22), value: model.isLoading)
 

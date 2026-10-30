@@ -16,6 +16,8 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
     @Published var isHome = true
     /// Icono real declarado por el sitio web (favicon / apple-touch-icon).
     @Published var faviconImage: UIImage?
+    /// true si la página reproduce audio ahora mismo (alimenta el panel de apps).
+    @Published var isPlayingAudio = false
 
     var onStateChange: (() -> Void)?
     private var observers: [NSKeyValueObservation] = []
@@ -261,6 +263,9 @@ final class BrowserModel: NSObject, ObservableObject {
         tabs = [firstTab]
         activeTabID = firstTab.id
         refreshFromActiveTab()
+        Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            self?.pollAudioState()
+        }
     }
 
     var activeTab: BrowserTab {
@@ -278,8 +283,9 @@ final class BrowserModel: NSObject, ObservableObject {
     private func makeTab() -> BrowserTab {
         let tab = BrowserTab()
         tab.onStateChange = { [weak self, weak tab] in
-            guard let self = self, let tab = tab, self.activeTabID == tab.id else { return }
-            self.refreshFromActiveTab()
+            guard let self = self, let tab = tab else { return }
+            self.objectWillChange.send() // el panel de apps también refleja pestañas en segundo plano
+            if self.activeTabID == tab.id { self.refreshFromActiveTab() }
         }
         return tab
     }

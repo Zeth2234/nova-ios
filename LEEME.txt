@@ -57,3 +57,12 @@ ICONOS REALES Y ANIMACIONES DE CARGA
   además de una línea de progreso con brillo en la barra de direcciones.
 - Los indicadores no interceptan toques ni bloquean el desplazamiento de la web.
 - Si una página no ofrece un icono compatible, Nova conserva el icono genérico.
+
+PANEL DE APPS (maximo 4 en segundo plano)
+=========================================
+- Nuevo archivo Nova/AppDock.swift: panel flotante sobre la barra inferior.
+- Reconoce YouTube, Spotify, WhatsApp, Discord, X, Twitch y SoundCloud (editable en AppCatalog).
+- Cerrada: no aparece. Abierta sin sonido: icono con punto. Sonando: icono con ecualizador animado.
+- La app que estas viendo lleva borde violeta con brillo. Mantén pulsado un icono para cerrarla.
+- Si abres una quinta app, se cierra la mas antigua que no este activa ni sonando.
+- Audio en segundo plano: AVAudioSession(.playback) + UIBackgroundModes=audio (project.yml).
