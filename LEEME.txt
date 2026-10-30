@@ -132,3 +132,7 @@ FONDO DE INICIO: FOTO, GIF Y VIDEO + EDITOR TIPO DISCORD
   para reajustar el fondo actual sin volver a elegirlo.
 - Corregido: project.yml forzaba el modo oscuro (UIUserInterfaceStyle: Dark), lo que
   impedía que "Sistema" siguiera el modo claro del iPhone.
+
+CORRECCION: al volver a "Sistema" desde Claro/Oscuro, Configuración se quedaba en el
+tema anterior. Ahora el tema se aplica solo a nivel de ventana, así que "Sistema"
+vuelve a seguir el modo del iPhone al instante.

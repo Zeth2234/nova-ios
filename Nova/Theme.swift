@@ -68,9 +68,13 @@ struct NovaAppearanceModifier: ViewModifier {
     private var mode: AppearanceMode { AppearanceMode(rawValue: raw) ?? .system }
 
     func body(content: Content) -> some View {
+        // No se usa preferredColorScheme: al volver a «Sistema» (nil) SwiftUI deja pegado el
+        // último tema en las hojas ya abiertas. El estilo de la ventana sí vuelve a seguir al sistema.
         content
-            .preferredColorScheme(mode.scheme)
-            .onAppear { AppearanceMode.applyToWindows(mode) }
+            .onAppear {
+                AppearanceMode.applyToWindows(mode)
+                DispatchQueue.main.async { AppearanceMode.applyToWindows(mode) }
+            }
             .onChange(of: raw) { _ in AppearanceMode.applyToWindows(mode) }
     }
 }
