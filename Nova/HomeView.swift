@@ -54,44 +54,86 @@ struct HomeTopBar: View {
 // MARK: - Reloj
 
 struct ClockView: View {
-    private static let timeFmt: DateFormatter = {
+    private static let hourFmt: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = "HH:mm"
+        f.dateFormat = "HH"
         return f
     }()
-    private static let dateFmt: DateFormatter = {
+    private static let minuteFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "mm"
+        return f
+    }()
+    private static let weekdayFmt: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "es_ES")
-        f.dateFormat = "EEEE, d 'de' MMMM"
+        f.dateFormat = "EEEE"
+        return f
+    }()
+    private static let dayFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "es_ES")
+        f.dateFormat = "d 'de' MMMM"
         return f
     }()
 
     var body: some View {
         TimelineView(.everyMinute) { ctx in
-            VStack(spacing: 8) {
-                Text(Self.greeting(for: ctx.date).uppercased())
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(1.6)
-                    .foregroundColor(NovaTheme.accent2.opacity(0.95))
-                Text(Self.timeFmt.string(from: ctx.date))
-                    .font(.system(size: 76, weight: .thin))
-                    .monospacedDigit()
+            let part = Self.dayPart(for: ctx.date)
+            VStack(spacing: 10) {
+                // Saludo en cápsula de cristal con icono según la hora
+                HStack(spacing: 7) {
+                    Image(systemName: part.symbol)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(part.tint)
+                    Text(part.text.uppercased())
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .tracking(2.0)
+                        .foregroundColor(.white.opacity(0.9))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(Capsule().fill(.ultraThinMaterial))
+                .overlay(Capsule().fill(Color.black.opacity(0.18)))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+
+                // Hora: trazo ultrafino, dígitos tabulares y dos puntos con acento
+                (Text(Self.hourFmt.string(from: ctx.date))
                     .foregroundColor(.white)
+                 + Text(":")
+                    .foregroundColor(NovaTheme.accent2.opacity(0.9))
+                 + Text(Self.minuteFmt.string(from: ctx.date))
+                    .foregroundColor(.white))
+                    .font(.system(size: 92, weight: .ultraLight))
+                    .monospacedDigit()
+                    .tracking(-1.5)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                Text(Self.capitalized(Self.dateFmt.string(from: ctx.date)))
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Color.white.opacity(0.7))
+                    .shadow(color: .black.opacity(0.35), radius: 14, y: 4)
+
+                // Fecha: día de la semana destacado + resto en tono suave
+                (Text(Self.capitalized(Self.weekdayFmt.string(from: ctx.date)))
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.95))
+                 + Text("  ·  ")
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundColor(.white.opacity(0.35))
+                 + Text(Self.dayFmt.string(from: ctx.date))
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundColor(.white.opacity(0.75)))
+                    .shadow(color: .black.opacity(0.35), radius: 8, y: 2)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(part.text), son las \(Self.hourFmt.string(from: ctx.date)) y \(Self.minuteFmt.string(from: ctx.date))")
         }
     }
 
-    private static func greeting(for date: Date) -> String {
+    private static func dayPart(for date: Date) -> (text: String, symbol: String, tint: Color) {
         let hour = Calendar.current.component(.hour, from: date)
         switch hour {
-        case 6..<13: return "Buenos días"
-        case 13..<20: return "Buenas tardes"
-        default: return "Buenas noches"
+        case 6..<13: return ("Buenos días", "sunrise.fill", Color(hex: 0xFFB45C))
+        case 13..<20: return ("Buenas tardes", "sun.max.fill", Color(hex: 0xFFC94D))
+        default: return ("Buenas noches", "moon.stars.fill", NovaTheme.accent2)
         }
     }
 
