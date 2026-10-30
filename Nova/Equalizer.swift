@@ -15,6 +15,7 @@ struct EQSettings: Codable, Equatable {
     var loudness = 0.0    // Sonoridad 0…1
     var limiter = true
     var mono = false
+    var compat = false    // modo compatible (experimental)
 }
 
 enum EQPresets {
@@ -80,22 +81,29 @@ final class EQModel: ObservableObject {
     }
 
     /// Mensaje claro sobre por qué funciona o no en la pestaña actual.
-    var diagnosis: (text: String, ok: Bool) {
-        guard let st = status else { return ("Abre una página web para usar el ecualizador.", false) }
+    var diagnosis: (text: String, ok: Bool, lines: [String]) {
+        guard let st = status else { return ("Abre una página web para usar el ecualizador.", false, []) }
         let ctx = st["ctx"] as? String ?? "none"
-        let media = st["media"] as? Int ?? 0
-        let att = st["att"] as? Int ?? 0
-        let reason = st["reason"] as? String ?? ""
         let err = st["err"] as? String ?? ""
-        if !err.isEmpty && att == 0 { return ("Error del motor: \(err)", false) }
-        if !s.enabled { return ("Ecualizador apagado. Actívalo con el interruptor de arriba.", false) }
-        if media == 0 { return ("Esta página no tiene audio ni vídeo ahora mismo.", false) }
-        if att == 0 && !reason.isEmpty {
-            return ("iOS no permite ecualizar este contenido (\(reason)). Usa «Probar con tono» para comprobar que el ecualizador responde.", false)
+        let els = (st["els"] as? [[String: Any]]) ?? []
+        let lines = els.map { e -> String in
+            let tag = e["tag"] as? String ?? "media"
+            let playing = e["playing"] as? Bool ?? false
+            let att = e["att"] as? Bool ?? false
+            let reason = e["reason"] as? String ?? ""
+            return "\(tag) · \(playing ? "suena" : "sin sonido") · " + (att ? "conectado" : (reason.isEmpty ? "sin conectar" : "no compatible: \(reason)"))
         }
-        if ctx == "suspended" { return ("Motor en pausa: cierra el panel, toca la web una vez y vuelve a abrirlo.", false) }
-        if att > 0 && ctx == "running" { return ("Activo: \(att) fuente(s) de audio conectada(s).", true) }
-        return ("Iniciando… (estado: \(ctx))", false)
+        let playing = els.filter { ($0["playing"] as? Bool) == true }
+        if !err.isEmpty && !els.contains(where: { ($0["att"] as? Bool) == true }) { return ("Error del motor: \(err)", false, lines) }
+        if !s.enabled { return ("Ecualizador apagado. Actívalo con el interruptor de arriba.", false, lines) }
+        if els.isEmpty { return ("Esta página no tiene audio ni vídeo ahora mismo.", false, lines) }
+        if playing.isEmpty { return ("No hay nada sonando en esta página. Dale a reproducir y vuelve a abrir el panel.", false, lines) }
+        if let bad = playing.first(where: { ($0["att"] as? Bool) != true }) {
+            let r = bad["reason"] as? String ?? "sin conectar"
+            return ("Lo que suena en esta página no se puede ecualizar en iOS (\(r)). El ecualizador funciona, pero ese audio no pasa por él. Usa «Probar con tono» para comprobarlo.", false, lines)
+        }
+        if ctx == "suspended" { return ("Motor en pausa: cierra el panel, toca la web una vez y vuelve a abrirlo.", false, lines) }
+        return ("Activo: el audio que suena está conectado al ecualizador.", true, lines)
     }
 
     func apply(preset name: String) {
@@ -112,8 +120,9 @@ enum EQEngine {
       if (window.__novaEQ) return;
       var F = [10,21,42,83,166,333,577,1000,2000,4000,8000,16000,20000];
       var S = __INIT__;
+      if (S.compat && !window.MediaSource && window.ManagedMediaSource) { window.MediaSource = window.ManagedMediaSource; }
       var st = { err: '', reason: '', att: 0, media: 0 }, force = false;
-      var ctx = null, inp, pre, filt = [], bassF, trebF, loL, loH, gLL, gRL, gLR, gRR, pan, comp, an, seen = new WeakSet();
+      var ctx = null, inp, pre, filt = [], bassF, trebF, loL, loH, gLL, gRL, gLR, gRR, comp, an, seen = new WeakSet();
 
       function mk(type, f, q) { var b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q || 1; return b; }
       function build() {
@@ -141,9 +150,9 @@ enum EQEngine {
         gLL = ctx.createGain(); gRL = ctx.createGain(); gLR = ctx.createGain(); gRR = ctx.createGain();
         sp.connect(gLL, 0); sp.connect(gLR, 0); sp.connect(gRL, 1); sp.connect(gRR, 1);
         gLL.connect(mg, 0, 0); gRL.connect(mg, 0, 0); gLR.connect(mg, 0, 1); gRR.connect(mg, 0, 1);
-        pan = ctx.createStereoPanner(); comp = ctx.createDynamicsCompressor();
+        comp = ctx.createDynamicsCompressor();
         an = ctx.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = 0.8;
-        mg.connect(pan); pan.connect(comp); comp.connect(an); an.connect(ctx.destination);
+        mg.connect(comp); comp.connect(an); an.connect(ctx.destination);
         update();
       }
       function set(p, v) { p.setTargetAtTime(v, ctx.currentTime, 0.03); }
@@ -155,8 +164,9 @@ enum EQEngine {
         set(bassF.gain, on ? S.bass : 0); set(trebF.gain, on ? S.treble : 0);
         set(loL.gain, on ? S.loudness * 8 : 0); set(loH.gain, on ? S.loudness * 4 : 0);
         var w = on ? (S.mono ? 0 : S.width) : 1, a = (1 + w) / 2, b = (1 - w) / 2;
-        set(gLL.gain, a); set(gRR.gain, a); set(gRL.gain, b); set(gLR.gain, b);
-        set(pan.pan, on ? Math.max(-1, Math.min(1, S.balance)) : 0);
+        var bal = on ? Math.max(-1, Math.min(1, S.balance)) : 0;
+        var lg = bal > 0 ? 1 - bal : 1, rg = bal < 0 ? 1 + bal : 1;
+        set(gLL.gain, lg * a); set(gRL.gain, lg * b); set(gLR.gain, rg * b); set(gRR.gain, rg * a);
         var lim = on && S.limiter;
         comp.threshold.value = lim ? -3 : 0; comp.knee.value = 0; comp.ratio.value = lim ? 20 : 1;
         comp.attack.value = 0.003; comp.release.value = 0.1;
@@ -186,7 +196,11 @@ enum EQEngine {
       }
       window.__novaEQ = {
         snapshot: function () {
-          return JSON.stringify({ sp: this.spectrum(), st: { ctx: ctx ? ctx.state : 'none', media: st.media, att: st.att, reason: st.reason, err: st.err } });
+          var els = Array.prototype.map.call(document.querySelectorAll('video,audio'), function (el) {
+            return { tag: el.tagName.toLowerCase(), playing: !el.paused && !el.ended && !el.muted && el.readyState > 2,
+                     att: seen.has(el), reason: why(el) };
+          });
+          return JSON.stringify({ sp: this.spectrum(), st: { ctx: ctx ? ctx.state : 'none', els: els, err: st.err } });
         },
         test: function () {
           force = true; sync(); if (!ctx) return;
@@ -233,6 +247,7 @@ struct VGainSlider: View {
     @Binding var value: Double
     let label: String
     private let range = -15.0...15.0
+    @State private var start: Double?
 
     var body: some View {
         VStack(spacing: 5) {
@@ -259,10 +274,11 @@ struct VGainSlider: View {
                 }
                 .contentShape(Rectangle())
                 .gesture(DragGesture(minimumDistance: 0).onChanged { v in
-                    let f = 1 - min(max(v.location.y / h, 0), 1)
-                    let raw = range.lowerBound + f * (range.upperBound - range.lowerBound)
-                    value = (raw * 10).rounded() / 10
-                })
+                    if start == nil { start = value }
+                    let span = range.upperBound - range.lowerBound
+                    let raw = (start ?? value) - Double(v.translation.height / h) * span
+                    value = (min(max(raw, range.lowerBound), range.upperBound) * 10).rounded() / 10
+                }.onEnded { _ in start = nil })
                 .onTapGesture(count: 2) { value = 0 }
             }
             .frame(height: 150)
@@ -294,10 +310,10 @@ struct EQKnob: View {
             }
             .frame(width: 50, height: 50)
             .contentShape(Circle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { v in
+            .simultaneousGesture(DragGesture(minimumDistance: 6).onChanged { v in
                 if start == nil { start = value }
                 let span = range.upperBound - range.lowerBound
-                value = min(max((start ?? value) - Double(v.translation.height) / 140 * span, range.lowerBound), range.upperBound)
+                value = min(max((start ?? value) + Double(v.translation.width) / 140 * span, range.lowerBound), range.upperBound)
             }.onEnded { _ in start = nil })
             .onTapGesture(count: 2) { value = neutral }
             Text(title).font(.system(size: 11, weight: .semibold)).foregroundColor(.white)
@@ -328,7 +344,7 @@ struct EQSheet: View {
                 knobsCard
                 togglesRow
                 diagnosticCard
-                Text("Doble toque en un control para restablecerlo. Afecta a todas las pestañas.")
+                Text("Mandos: arrastra de lado. Doble toque restablece. Afecta a todas las pestañas.")
                     .font(.system(size: 11)).foregroundColor(NovaTheme.dim).multilineTextAlignment(.center)
             }
             .padding(16)
@@ -477,12 +493,27 @@ struct EQSheet: View {
                 Text(d.text).font(.system(size: 12.5)).foregroundColor(.white.opacity(0.9))
                     .fixedSize(horizontal: false, vertical: true)
             }
+            ForEach(Array(d.lines.enumerated()), id: \.offset) { _, line in
+                Text(line).font(.system(size: 10.5, design: .monospaced)).foregroundColor(NovaTheme.dim)
+            }
             Button { eq.playTestTone() } label: {
                 Label("Probar con tono (4 s)", systemImage: "speaker.wave.2.fill")
                     .font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
                     .frame(maxWidth: .infinity).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NovaTheme.surfaceHi))
             }.buttonStyle(.plain)
+            Button { var t = EQSettings(); t.enabled = eq.s.enabled; t.compat = eq.s.compat; eq.s = t } label: {
+                Label("Restablecer todo", systemImage: "arrow.counterclockwise")
+                    .font(.system(size: 13, weight: .semibold)).foregroundColor(NovaTheme.dim)
+                    .frame(maxWidth: .infinity).padding(.vertical, 8)
+            }.buttonStyle(.plain)
+            Toggle(isOn: Binding(get: { eq.s.compat }, set: { var t = eq.s; t.compat = $0; eq.s = t })) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Modo compatible (experimental)").font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+                    Text("Intenta que YouTube use un formato ecualizable. Aplica solo a pestañas nuevas.")
+                        .font(.system(size: 10.5)).foregroundColor(NovaTheme.dim)
+                }
+            }.tint(NovaTheme.accent)
         }
         .padding(12).novaCard(radius: 14)
     }
