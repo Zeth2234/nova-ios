@@ -76,15 +76,6 @@ final class EQModel: ObservableObject {
         }
     }
 
-    /// Alterna la versión de ordenador (user agent de Safari de Mac) en la pestaña activa y recarga.
-    func toggleDesktop() {
-        guard let w = activeWebView() else { return }
-        w.customUserAgent = (w.customUserAgent == nil)
-            ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
-            : nil
-        w.reload()
-    }
-
     func playTestTone() {
         activeWebView()?.evaluateJavaScript("window.__novaEQ && window.__novaEQ.test()", completionHandler: nil)
     }
@@ -520,12 +511,6 @@ struct EQSheet: View {
                     .font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
                     .frame(maxWidth: .infinity).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NovaTheme.accent.opacity(0.35)))
-            }.buttonStyle(.plain)
-            Button { eq.toggleDesktop(); dismiss() } label: {
-                Label("Alternar versión de ordenador (recarga)", systemImage: "desktopcomputer")
-                    .font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
-                    .frame(maxWidth: .infinity).padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NovaTheme.surfaceHi))
             }.buttonStyle(.plain)
             Button { var t = EQSettings(); t.enabled = eq.s.enabled; t.compat = eq.s.compat; eq.s = t } label: {
                 Label("Restablecer todo", systemImage: "arrow.counterclockwise")

@@ -52,14 +52,22 @@ struct AddressBar: View {
     var body: some View {
         HStack(spacing: 10) {
             HStack(spacing: 11) {
-                ZStack {
-                    Circle()
-                        .fill((model.isSecure ? NovaTheme.good : Color.orange).opacity(0.13))
-                        .frame(width: 30, height: 30)
-                    Image(systemName: model.isSecure ? "lock.fill" : "lock.open.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(model.isSecure ? NovaTheme.good : Color.orange)
+                Menu {
+                    Button { model.toggleDesktop() } label: {
+                        Label(model.activeTab.desktopMode ? "Versión para móvil" : "Versión de ordenador",
+                              systemImage: model.activeTab.desktopMode ? "iphone" : "desktopcomputer")
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill((model.isSecure ? NovaTheme.good : Color.orange).opacity(0.13))
+                            .frame(width: 30, height: 30)
+                        Image(systemName: model.isSecure ? "lock.fill" : "lock.open.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(model.isSecure ? NovaTheme.good : Color.orange)
+                    }
                 }
+                .accessibilityLabel("Opciones del sitio")
 
                 ZStack(alignment: .leading) {
                     TextField("Buscar o escribir una dirección", text: $model.addressText)

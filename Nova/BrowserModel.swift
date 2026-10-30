@@ -18,6 +18,8 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
     @Published var faviconImage: UIImage?
     /// true si la página reproduce audio ahora mismo (alimenta el panel de apps).
     @Published var isPlayingAudio = false
+    /// Versión de ordenador: user agent de Safari de Mac + modo de contenido de escritorio.
+    @Published var desktopMode = false
 
     var onStateChange: (() -> Void)?
     private var observers: [NSKeyValueObservation] = []
@@ -102,6 +104,23 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
         notifyStateChange()
     }
 
+    func setDesktop(_ on: Bool) {
+        desktopMode = on
+        webView.customUserAgent = on
+            ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
+            : nil
+        guard var comps = webView.url.flatMap({ URLComponents(url: $0, resolvingAgainstBaseURL: false) }) else {
+            notifyStateChange(); return
+        }
+        // Los subdominios móviles (m.youtube.com…) siguen sirviendo la versión móvil: se pasa al dominio normal.
+        if on, let h = comps.host, h.hasPrefix("m.") || h.hasPrefix("mobile.") {
+            comps.host = String(h.drop(while: { $0 != "." }).dropFirst())
+            if comps.host?.contains(".") == true, !(comps.host?.hasPrefix("www.") ?? false) { comps.host = "www." + (comps.host ?? "") }
+        }
+        if let url = comps.url { isHome = false; webView.load(URLRequest(url: url)) }
+        notifyStateChange()
+    }
+
     func reloadOrStop() {
         if webView.isLoading {
             webView.stopLoading()
@@ -131,6 +150,13 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
     }
 
     // MARK: WKNavigationDelegate
+    func webView(_ webView: WKWebView,
+                 decidePolicyFor navigationAction: WKNavigationAction,
+                 preferences: WKWebpagePreferences,
+                 decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
+        preferences.preferredContentMode = desktopMode ? .desktop : .mobile
+        decisionHandler(.allow, preferences)
+    }
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { refreshState() }
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) { refreshState() }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -341,6 +367,11 @@ final class BrowserModel: NSObject, ObservableObject {
         let replacement = makeTab()
         tabs = [replacement]
         activeTabID = replacement.id
+        refreshFromActiveTab()
+    }
+
+    func toggleDesktop() {
+        activeTab.setDesktop(!activeTab.desktopMode)
         refreshFromActiveTab()
     }
 
