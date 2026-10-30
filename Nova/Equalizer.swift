@@ -36,6 +36,7 @@ final class EQModel: ObservableObject {
 
     @Published var s: EQSettings { didSet { save(); push() } }
     @Published var spectrum: [Double] = []
+    @Published var status: [String: Any]?
     var webViews: () -> [WKWebView] = { [] }
     var activeWebView: () -> WKWebView? = { nil }
 
@@ -63,10 +64,38 @@ final class EQModel: ObservableObject {
     }
 
     func pollSpectrum() {
-        activeWebView()?.evaluateJavaScript("window.__novaEQ ? window.__novaEQ.spectrum() : []") { [weak self] r, _ in
-            let values = (r as? [NSNumber])?.map { $0.doubleValue } ?? []
-            DispatchQueue.main.async { self?.spectrum = values }
+        activeWebView()?.evaluateJavaScript("window.__novaEQ ? window.__novaEQ.snapshot() : ''") { [weak self] r, _ in
+            var sp: [Double] = [], st: [String: Any]?
+            if let str = r as? String, !str.isEmpty,
+               let obj = (try? JSONSerialization.jsonObject(with: Data(str.utf8))) as? [String: Any] {
+                sp = (obj["sp"] as? [NSNumber])?.map { $0.doubleValue } ?? []
+                st = obj["st"] as? [String: Any]
+            }
+            DispatchQueue.main.async { self?.spectrum = sp; self?.status = st }
         }
+    }
+
+    func playTestTone() {
+        activeWebView()?.evaluateJavaScript("window.__novaEQ && window.__novaEQ.test()", completionHandler: nil)
+    }
+
+    /// Mensaje claro sobre por qué funciona o no en la pestaña actual.
+    var diagnosis: (text: String, ok: Bool) {
+        guard let st = status else { return ("Abre una página web para usar el ecualizador.", false) }
+        let ctx = st["ctx"] as? String ?? "none"
+        let media = st["media"] as? Int ?? 0
+        let att = st["att"] as? Int ?? 0
+        let reason = st["reason"] as? String ?? ""
+        let err = st["err"] as? String ?? ""
+        if !err.isEmpty && att == 0 { return ("Error del motor: \(err)", false) }
+        if !s.enabled { return ("Ecualizador apagado. Actívalo con el interruptor de arriba.", false) }
+        if media == 0 { return ("Esta página no tiene audio ni vídeo ahora mismo.", false) }
+        if att == 0 && !reason.isEmpty {
+            return ("iOS no permite ecualizar este contenido (\(reason)). Usa «Probar con tono» para comprobar que el ecualizador responde.", false)
+        }
+        if ctx == "suspended" { return ("Motor en pausa: cierra el panel, toca la web una vez y vuelve a abrirlo.", false) }
+        if att > 0 && ctx == "running" { return ("Activo: \(att) fuente(s) de audio conectada(s).", true) }
+        return ("Iniciando… (estado: \(ctx))", false)
     }
 
     func apply(preset name: String) {
@@ -83,10 +112,18 @@ enum EQEngine {
       if (window.__novaEQ) return;
       var F = [10,21,42,83,166,333,577,1000,2000,4000,8000,16000,20000];
       var S = __INIT__;
+      var st = { err: '', reason: '', att: 0, media: 0 }, force = false;
       var ctx = null, inp, pre, filt = [], bassF, trebF, loL, loH, gLL, gRL, gLR, gRR, pan, comp, an, seen = new WeakSet();
 
       function mk(type, f, q) { var b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q || 1; return b; }
       function build() {
+        try { build0(); } catch (e) {
+          st.err = 'build: ' + (e && e.message || e);
+          try { ctx && ctx.close(); } catch (_) {}
+          ctx = null; filt = [];
+        }
+      }
+      function build0() {
         var C = window.AudioContext || window.webkitAudioContext; if (!C) return;
         ctx = new C({ latencyHint: 'playback' });
         inp = ctx.createGain(); pre = ctx.createGain();
@@ -125,24 +162,41 @@ enum EQEngine {
         comp.attack.value = 0.003; comp.release.value = 0.1;
         if (ctx.state === 'suspended') ctx.resume().catch(function () {});
       }
-      function ok(el) {
-        var u = el.currentSrc || el.src; if (!u) return false;
-        if (u.indexOf('blob:') === 0 || u.indexOf('data:') === 0) return true;
-        try { return new URL(u, location.href).origin === location.origin; } catch (e) { return false; }
+      function why(el) {
+        var u = el.currentSrc || el.src; if (!u) return 'sin fuente';
+        if (u.indexOf('blob:') === 0 || u.indexOf('data:') === 0) return '';
+        try { if (new URL(u, location.href).origin === location.origin) return ''; } catch (e) {}
+        return /\.m3u8|manifest|playlist/i.test(u) ? 'HLS nativo de iOS' : 'audio de otro dominio';
       }
       function attach(el) {
-        if (seen.has(el) || !ok(el)) return;
-        try { ctx.createMediaElementSource(el).connect(inp); seen.add(el); } catch (e) {}
+        if (seen.has(el)) return;
+        var r = why(el); if (r) { st.reason = r; return; }
+        try { ctx.createMediaElementSource(el).connect(inp); seen.add(el); st.att++; st.reason = ''; }
+        catch (e) { st.err = String(e && e.message || e); }
       }
       function sync() {
-        var m = document.querySelectorAll('video,audio');
-        if (S.enabled && m.length && !ctx) build();
-        if (ctx) { update(); m.forEach(attach); }
+        try {
+          var m = document.querySelectorAll('video,audio'); st.media = m.length;
+          if (!ctx && ((S.enabled && m.length) || force)) build();
+          if (ctx) { update(); m.forEach(attach); }
+        } catch (e) { st.err = String(e && e.message || e); }
       }
       function down(s) {
         for (var i = 0; i < window.frames.length; i++) { try { window.frames[i].postMessage({ novaEQ: s }, '*'); } catch (e) {} }
       }
       window.__novaEQ = {
+        snapshot: function () {
+          return JSON.stringify({ sp: this.spectrum(), st: { ctx: ctx ? ctx.state : 'none', media: st.media, att: st.att, reason: st.reason, err: st.err } });
+        },
+        test: function () {
+          force = true; sync(); if (!ctx) return;
+          var b = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = b.getChannelData(0);
+          for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+          var n = ctx.createBufferSource(); n.buffer = b; n.loop = true;
+          var g = ctx.createGain(); g.gain.value = 0.12; n.connect(g); g.connect(inp); n.start();
+          if (ctx.state === 'suspended') ctx.resume().catch(function () {});
+          setTimeout(function () { try { n.stop(); } catch (e) {} force = false; }, 4000);
+        },
         apply: function (s) { S = s; sync(); down(s); },
         spectrum: function () {
           if (!an) return [];
@@ -273,6 +327,7 @@ struct EQSheet: View {
                 bandsCard
                 knobsCard
                 togglesRow
+                diagnosticCard
                 Text("Doble toque en un control para restablecerlo. Afecta a todas las pestañas.")
                     .font(.system(size: 11)).foregroundColor(NovaTheme.dim).multilineTextAlignment(.center)
             }
@@ -411,6 +466,25 @@ struct EQSheet: View {
         .padding(.vertical, 14).padding(.horizontal, 4)
         .novaCard()
         .opacity(eq.s.enabled ? 1 : 0.55)
+    }
+
+    private var diagnosticCard: some View {
+        let d = eq.diagnosis
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: d.ok ? "checkmark.circle.fill" : "info.circle.fill")
+                    .foregroundColor(d.ok ? NovaTheme.good : Color.orange)
+                Text(d.text).font(.system(size: 12.5)).foregroundColor(.white.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button { eq.playTestTone() } label: {
+                Label("Probar con tono (4 s)", systemImage: "speaker.wave.2.fill")
+                    .font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NovaTheme.surfaceHi))
+            }.buttonStyle(.plain)
+        }
+        .padding(12).novaCard(radius: 14)
     }
 
     private var togglesRow: some View {
