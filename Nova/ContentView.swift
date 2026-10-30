@@ -55,7 +55,12 @@ struct ContentView: View {
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showEQ) {
-            EQSheet(host: model.isHome ? "Todas las pestañas" : model.host)
+            EQSheet(host: model.isHome ? "Todas las pestañas" : model.host,
+                    openTest: {
+                        showEQ = false
+                        model.createTab()
+                        model.activeTab.loadEQTestPage()
+                    })
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }

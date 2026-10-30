@@ -330,6 +330,7 @@ struct EQKnob: View {
 
 struct EQSheet: View {
     let host: String
+    var openTest: () -> Void = {}
     @ObservedObject private var eq = EQModel.shared
     @Environment(\.dismiss) private var dismiss
     private let timer = Timer.publish(every: 0.09, on: .main, in: .common).autoconnect()
@@ -505,6 +506,12 @@ struct EQSheet: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NovaTheme.surfaceHi))
             }.buttonStyle(.plain)
+            Button(action: openTest) {
+                Label("Abrir audio de prueba (sin YouTube)", systemImage: "play.circle.fill")
+                    .font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NovaTheme.accent.opacity(0.35)))
+            }.buttonStyle(.plain)
             Button { var t = EQSettings(); t.enabled = eq.s.enabled; t.compat = eq.s.compat; eq.s = t } label: {
                 Label("Restablecer todo", systemImage: "arrow.counterclockwise")
                     .font(.system(size: 13, weight: .semibold)).foregroundColor(NovaTheme.dim)
@@ -540,5 +547,35 @@ struct EQSheet: View {
             Toggle("", isOn: b).labelsHidden().tint(NovaTheme.accent)
         }
         .padding(12).novaCard(radius: 14)
+    }
+}
+
+// MARK: - Página de prueba (audio sencillo, sin YouTube)
+
+extension EQEngine {
+    static let testPage = #"""
+    <html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Audio de prueba</title>
+    <style>body{background:#080B14;color:#fff;font-family:-apple-system,sans-serif;padding:28px;line-height:1.5}
+    audio{width:100%;margin:18px 0}h2{margin:0 0 8px}p{color:#aab;font-size:15px}</style></head><body>
+    <h2>Audio de prueba</h2>
+    <p>1. Pulsa ▶ (suenan 3 notas: grave, media y aguda).<br>2. Abre el ecualizador y activa el interruptor.<br>
+    3. Sube mucho los graves y baja los agudos (o al revés).<br>Si el sonido cambia, el ecualizador funciona y el límite es solo de YouTube.</p>
+    <audio id="a" controls loop></audio>
+    <script>
+    var r=44100,n=r*4,b=new ArrayBuffer(44+n*2),v=new DataView(b);
+    function w(o,t){for(var i=0;i<t.length;i++)v.setUint8(o+i,t.charCodeAt(i));}
+    w(0,'RIFF');v.setUint32(4,36+n*2,true);w(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+    v.setUint32(24,r,true);v.setUint32(28,r*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*2,true);
+    for(var i=0;i<n;i++){var t=i/r;v.setInt16(44+i*2,2600*(Math.sin(6.2832*110*t)+Math.sin(6.2832*1000*t)+Math.sin(6.2832*6000*t)),true);}
+    document.getElementById('a').src=URL.createObjectURL(new Blob([b],{type:'audio/wav'}));
+    </script></body></html>
+    """#
+}
+
+extension BrowserTab {
+    func loadEQTestPage() {
+        isHome = false
+        webView.loadHTMLString(EQEngine.testPage, baseURL: URL(string: "https://nova.local"))
+        onStateChange?()
     }
 }
