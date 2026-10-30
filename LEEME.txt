@@ -13,3 +13,33 @@ NOVA iOS - PRUEBA MINIMA
 7. Instala Nova.ipa en el iPhone con AltStore (o Sideloadly) con tu Apple ID.
 
 Si sale una X roja: abre la ejecucion, pulsa el paso que fallo y copia el error para mandarmelo.
+
+MEJORAS DE NAVEGACION INCLUIDAS
+===============================
+- Pestañas independientes: cada una conserva su propia página e historial.
+- Selector de pestañas con título, dominio y estado de pestaña activa.
+- Cierre individual, cierre de todas y creación de pestañas nuevas.
+- Cambio real del WKWebView visible al seleccionar otra pestaña.
+- Barra de direcciones mejorada en páginas abiertas, con estado de conexión,
+  edición de dirección/búsqueda, recarga/detención y acceso directo a nueva pestaña.
+- Barra inferior renovada con contador de pestañas.
+- Paleta visual más sobria y superficies con mejor jerarquía y contraste.
+
+La compilación IPA sigue realizándose desde GitHub Actions en macOS, siguiendo
+los pasos anteriores. El entorno donde se preparó este ZIP no incluye Xcode ni
+el SDK de iOS para generar un IPA localmente.
+
+MEJORAS DE NAVEGACION INCLUIDAS
+===============================
+- Pestañas independientes: cada una conserva su propia página e historial.
+- Selector de pestañas con título, dominio y estado de pestaña activa.
+- Cierre individual, cierre de todas y creación de pestañas nuevas.
+- Cambio real del WKWebView visible al seleccionar otra pestaña.
+- Barra de direcciones mejorada en páginas abiertas, con estado de conexión,
+  edición de dirección/búsqueda, recarga/detención y acceso directo a nueva pestaña.
+- Barra inferior renovada con contador de pestañas.
+- Paleta visual más sobria y superficies con mejor jerarquía y contraste.
+
+La compilación IPA sigue realizándose desde GitHub Actions en macOS, siguiendo
+los pasos anteriores. El entorno donde se preparó este ZIP no incluye Xcode ni
+el SDK de iOS para generar un IPA localmente.

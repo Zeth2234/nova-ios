@@ -13,14 +13,15 @@ extension Color {
 }
 
 enum NovaTheme {
-    static let bg        = Color(hex: 0x07071A)
-    static let surface   = Color(hex: 0x10101F)
-    static let surfaceHi = Color(hex: 0x1A1A2E)
-    static let stroke    = Color.white.opacity(0.09)
-    static let accent    = Color(hex: 0x8B6CFF)
-    static let accent2   = Color(hex: 0x5B8CFF)
-    static let dim       = Color.white.opacity(0.55)
-    static let good      = Color(hex: 0x3DDC97)
+    // Grafito azulado con acentos violeta/azul: contraste alto sin neón excesivo.
+    static let bg        = Color(hex: 0x080B14)
+    static let surface   = Color(hex: 0x111725)
+    static let surfaceHi = Color(hex: 0x1A2333)
+    static let stroke    = Color.white.opacity(0.085)
+    static let accent    = Color(hex: 0x8D7CFF)
+    static let accent2   = Color(hex: 0x57A7FF)
+    static let dim       = Color.white.opacity(0.58)
+    static let good      = Color(hex: 0x47D5A1)
 
     static let accentGradient = LinearGradient(
         colors: [accent, accent2],
@@ -87,13 +88,13 @@ struct StarField: View {
 struct NovaBackground: View {
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(hex: 0x0A0A22), Color(hex: 0x07071A)],
+            LinearGradient(colors: [Color(hex: 0x0D1322), NovaTheme.bg],
                            startPoint: .top, endPoint: .bottom)
-            RadialGradient(colors: [Color(hex: 0x4B2FB8, opacity: 0.70), .clear],
+            RadialGradient(colors: [Color(hex: 0x49389B, opacity: 0.38), .clear],
                            center: .bottomLeading, startRadius: 0, endRadius: 560)
-            RadialGradient(colors: [Color(hex: 0x8A3C7E, opacity: 0.38), .clear],
+            RadialGradient(colors: [Color(hex: 0x543B70, opacity: 0.16), .clear],
                            center: UnitPoint(x: 1.0, y: 0.60), startRadius: 0, endRadius: 380)
-            RadialGradient(colors: [Color(hex: 0x1E7F8F, opacity: 0.40), .clear],
+            RadialGradient(colors: [Color(hex: 0x226A78, opacity: 0.20), .clear],
                            center: .topTrailing, startRadius: 0, endRadius: 440)
             StarField()
         }

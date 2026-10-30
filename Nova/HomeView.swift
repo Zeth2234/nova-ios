@@ -160,9 +160,10 @@ struct HomeView: View {
         .padding(.leading, 8)
         .padding(.trailing, 10)
         .padding(.vertical, 8)
-        .background(Capsule().fill(Color.black.opacity(0.45)))
-        .overlay(Capsule().stroke(focused ? NovaTheme.accent.opacity(0.7) : NovaTheme.stroke, lineWidth: 1))
-        .shadow(color: Color.black.opacity(0.35), radius: 16, y: 8)
+        .background(RoundedRectangle(cornerRadius: 19, style: .continuous).fill(NovaTheme.surface.opacity(0.94)))
+        .overlay(RoundedRectangle(cornerRadius: 19, style: .continuous)
+            .stroke(focused ? NovaTheme.accent.opacity(0.72) : NovaTheme.stroke, lineWidth: 1))
+        .shadow(color: Color.black.opacity(0.24), radius: 18, y: 8)
         .animation(.easeOut(duration: 0.2), value: focused)
     }
 

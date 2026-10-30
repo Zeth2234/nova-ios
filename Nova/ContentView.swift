@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var model = BrowserModel()
     @State private var showSettings = false
+    @State private var showTabs = false
 
     var body: some View {
         ZStack {
@@ -13,7 +14,7 @@ struct ContentView: View {
                     HomeTopBar(openSettings: { showSettings = true })
                 } else {
                     AddressBar(model: model)
-                        .background(NovaTheme.bg.ignoresSafeArea(edges: .top))
+                        .background(NovaTheme.bg.opacity(0.97).ignoresSafeArea(edges: .top))
                 }
 
                 ZStack {
@@ -25,21 +26,20 @@ struct ContentView: View {
                     }
                 }
 
-                BottomBar(model: model, openSettings: { showSettings = true })
-                    .background(
-                        (model.isHome ? Color.clear : NovaTheme.bg)
-                            .ignoresSafeArea(edges: .bottom)
-                    )
-                    .overlay(alignment: .top) {
-                        Rectangle()
-                            .fill(NovaTheme.stroke)
-                            .frame(height: model.isHome ? 0 : 1)
-                    }
+                BottomBar(model: model,
+                          openSettings: { showSettings = true },
+                          openTabs: { showTabs = true })
+                    .background(NovaTheme.bg.opacity(0.97).ignoresSafeArea(edges: .bottom))
             }
         }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showSettings) {
             SettingsView()
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showTabs) {
+            TabSwitcherView(model: model)
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
     }
