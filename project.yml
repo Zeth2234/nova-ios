@@ -22,4 +22,5 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
         INFOPLIST_KEY_UIBackgroundModes: audio
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "Nova usa Face ID para proteger la navegación privada y tus contraseñas guardadas."
         TARGETED_DEVICE_FAMILY: "1,2"

@@ -81,3 +81,31 @@ FONDO DE INICIO PERSONALIZADO
 - El archivo se guarda en el dispositivo (Application Support) y se mantiene al cerrar la app.
 - Los GIFs se reducen a 640 px y 40 fotogramas como maximo para no gastar memoria.
 - Boton de papelera para volver al fondo original. Archivo: Nova/HomeBackground.swift.
+
+MODO INCOGNITO PROFESIONAL
+==========================
+- Menu "..." > "Nueva pestana privada" (o el selector Normales / Privadas en el panel de pestanas).
+- Almacenamiento aislado: cookies, cache y datos de sitios viven solo en memoria
+  (WKWebsiteDataStore.nonPersistent). Al cerrar la ultima pestana privada se descartan.
+- Sin favicons en cache ni en disco, sin guardar contraseñas y sin aparecer en el panel de apps.
+- Bloqueo de rastreadores de terceros (anuncios y analiticas) en pestanas privadas
+  (se puede desactivar en Configuracion).
+- Interfaz propia (violeta oscuro) con insignia "Privada" en la barra y pantalla de inicio explicativa.
+- Face ID: abrir la navegacion privada lo pide, y se vuelve a pedir al regresar de segundo plano.
+- El selector de apps de iOS muestra una pantalla en blanco en vez de las paginas.
+- Nueva en Configuracion > "Seguridad y modo privado": bloquear toda la app con Face ID,
+  proteger las pestanas privadas y bloquear rastreadores.
+
+INICIO RAPIDO CON FACE ID
+=========================
+- Al iniciar sesion en una web, Nova pregunta si quieres guardar la contraseña.
+- Se guarda en el llavero del iPhone con control de acceso: iOS pide Face ID cada vez que se lee.
+- En las paginas de login aparece el boton "Iniciar sesion rapido": Face ID, rellena y entra.
+  Funciona tambien en logins de dos pantallas (usuario y luego contraseña).
+- Configuracion > "Inicio rapido": activar/desactivar, entrar automaticamente y gestionar las cuentas guardadas.
+- IMPORTANTE (el error que daba antes): se añadio NSFaceIDUsageDescription en project.yml. Sin ese texto
+  iOS rechaza cualquier uso de Face ID.
+- Passkeys ("iniciar sesion con clave"): iOS solo las permite en WKWebView a apps con un permiso especial
+  de Apple que no se puede obtener con AltStore / Apple ID gratuito. Por eso Nova hace que los sitios no
+  las ofrezcan y caigan a contraseña, que Nova rellena con Face ID. Si un sitio insiste, sale un aviso
+  y siempre puedes usar "Abrir en Safari" desde el menu del icono del sitio.

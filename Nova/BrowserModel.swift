@@ -7,6 +7,14 @@ import WebKit
 final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDelegate, WKUIDelegate {
     let id = UUID()
     let webView: WKWebView
+    /// true en pestañas privadas: datos de sitio solo en memoria, sin favicons en caché ni contraseñas.
+    let isPrivate: Bool
+
+    /// Almacén compartido por todas las pestañas privadas. Al cerrar la última se descarta
+    /// y se crea uno nuevo, con lo que cookies y datos desaparecen.
+    static var privateStore = WKWebsiteDataStore.nonPersistent()
+    static func resetPrivateStore() { privateStore = WKWebsiteDataStore.nonPersistent() }
+    private static let privateSession = URLSession(configuration: .ephemeral)
 
     @Published var title = "Nueva pestaña"
     @Published var host = "Página de inicio"
@@ -27,8 +35,10 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
     private var faviconTask: URLSessionDataTask?
     private static let faviconCache = NSCache<NSURL, UIImage>()
 
-    override init() {
+    init(isPrivate: Bool = false) {
+        self.isPrivate = isPrivate
         let config = WKWebViewConfiguration()
+        config.websiteDataStore = isPrivate ? BrowserTab.privateStore : WKWebsiteDataStore.default()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
 
@@ -46,6 +56,8 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
         """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         config.userContentController.addUserScript(keepAlive)
         config.userContentController.addUserScript(EQModel.shared.userScript) // ecualizador global
+        config.userContentController.addUserScript(QuickLoginScripts.passkeyShim)
+        if !isPrivate { config.userContentController.addUserScript(QuickLoginScripts.credentials) }
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = true
@@ -56,6 +68,14 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
         super.init()
         webView.navigationDelegate = self
         webView.uiDelegate = self
+
+        let controller = webView.configuration.userContentController
+        controller.add(WeakScriptHandler(self), name: "novaPasskey")
+        if isPrivate {
+            if Prefs.flag("blockTrackers") { TrackerBlocker.install(on: controller) }
+        } else {
+            controller.add(WeakScriptHandler(self), name: "novaCreds")
+        }
 
         observers.append(webView.observe(\.estimatedProgress, options: [.new]) { [weak self] webView, _ in
             DispatchQueue.main.async {
@@ -72,6 +92,16 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
         observers.append(webView.observe(\.isLoading, options: [.new]) { [weak self] _, _ in
             DispatchQueue.main.async { self?.refreshState() }
         })
+    }
+
+    /// Libera la pestaña: detiene la carga y suelta los manejadores de scripts.
+    func teardown() {
+        faviconTask?.cancel()
+        webView.stopLoading()
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+        webView.configuration.userContentController.removeAllScriptMessageHandlers()
+        if isPrivate { webView.loadHTMLString("", baseURL: nil) }
     }
 
     var hasPage: Bool { webView.url != nil }
@@ -228,7 +258,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
         guard faviconPageKey == pageKey, index < candidates.count else { return }
         let url = candidates[index]
         let cacheKey = url as NSURL
-        if let cached = Self.faviconCache.object(forKey: cacheKey) {
+        if !isPrivate, let cached = Self.faviconCache.object(forKey: cacheKey) {
             faviconImage = cached
             notifyStateChange()
             return
@@ -236,8 +266,9 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
 
         var request = URLRequest(url: url)
         request.timeoutInterval = 8
-        request.cachePolicy = .returnCacheDataElseLoad
-        faviconTask = URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
+        request.cachePolicy = isPrivate ? .reloadIgnoringLocalCacheData : .returnCacheDataElseLoad
+        let session = isPrivate ? Self.privateSession : URLSession.shared
+        faviconTask = session.dataTask(with: request) { [weak self] data, response, _ in
             guard let self = self, self.faviconPageKey == pageKey else { return }
             let image: UIImage? = {
                 guard let response = response as? HTTPURLResponse,
@@ -248,7 +279,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
             }()
 
             if let image = image {
-                Self.faviconCache.setObject(image, forKey: cacheKey)
+                if !self.isPrivate { Self.faviconCache.setObject(image, forKey: cacheKey) }
                 DispatchQueue.main.async {
                     guard self.faviconPageKey == pageKey,
                           self.webView.url?.host == URL(string: pageKey)?.host else { return }
@@ -299,10 +330,11 @@ final class BrowserModel: NSObject, ObservableObject {
     @Published var isSecure = true
     @Published var progress: Double = 0
     @Published var isHome = true
+    @Published var isPrivate = false
 
     override init() {
         super.init()
-        let firstTab = makeTab()
+        let firstTab = makeTab(private: false)
         tabs = [firstTab]
         activeTabID = firstTab.id
         refreshFromActiveTab()
@@ -322,11 +354,14 @@ final class BrowserModel: NSObject, ObservableObject {
     }
 
     var webView: WKWebView { activeTab.webView }
-    var tabCount: Int { tabs.count }
+    /// Número de pestañas del modo activo (normal o privado).
+    var tabCount: Int { modeTabs(activeTab.isPrivate).count }
+
+    func modeTabs(_ priv: Bool) -> [BrowserTab] { tabs.filter { $0.isPrivate == priv } }
     var backEnabled: Bool { activeTab.hasPage }
 
-    private func makeTab() -> BrowserTab {
-        let tab = BrowserTab()
+    private func makeTab(private priv: Bool) -> BrowserTab {
+        let tab = BrowserTab(isPrivate: priv)
         tab.onStateChange = { [weak self, weak tab] in
             guard let self = self, let tab = tab else { return }
             self.objectWillChange.send() // el panel de apps también refleja pestañas en segundo plano
@@ -335,9 +370,9 @@ final class BrowserModel: NSObject, ObservableObject {
         return tab
     }
 
-    /// Crea una pestaña nueva y la selecciona inmediatamente.
-    func createTab() {
-        let tab = makeTab()
+    /// Crea una pestaña nueva (normal o privada) y la selecciona inmediatamente.
+    func createTab(private priv: Bool = false) {
+        let tab = makeTab(private: priv)
         tabs.append(tab)
         activeTabID = tab.id
         refreshFromActiveTab()
@@ -351,25 +386,71 @@ final class BrowserModel: NSObject, ObservableObject {
 
     func closeTab(_ id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        let closingActiveTab = activeTabID == id
+        let closing = tabs[index]
+        let wasActive = activeTabID == id
         tabs.remove(at: index)
+        closing.teardown()
+        if closing.isPrivate { discardPrivateDataIfUnused() }
 
-        if tabs.isEmpty {
-            let replacement = makeTab()
-            tabs = [replacement]
-            activeTabID = replacement.id
-        } else if closingActiveTab {
-            let nextIndex = min(index, tabs.count - 1)
-            activeTabID = tabs[nextIndex].id
+        if wasActive {
+            // Prefiere la pestaña más cercana del mismo modo; si no queda, una normal.
+            let sameMode = tabs.enumerated()
+                .filter { $0.element.isPrivate == closing.isPrivate }
+                .min { abs($0.offset - index) < abs($1.offset - index) }
+            if let next = sameMode?.element {
+                activeTabID = next.id
+            } else if let normal = tabs.last(where: { !$0.isPrivate }) {
+                activeTabID = normal.id
+            } else {
+                let replacement = makeTab(private: false)
+                tabs.append(replacement)
+                activeTabID = replacement.id
+            }
         }
+        ensureNormalTab()
         refreshFromActiveTab()
     }
 
-    func closeAllTabs() {
-        let replacement = makeTab()
-        tabs = [replacement]
-        activeTabID = replacement.id
+    /// Cierra todas las pestañas del modo indicado.
+    func closeAllTabs(private priv: Bool = false) {
+        let closing = tabs.filter { $0.isPrivate == priv }
+        tabs.removeAll { $0.isPrivate == priv }
+        closing.forEach { $0.teardown() }
+        if priv { discardPrivateDataIfUnused() }
+
+        if let id = activeTabID, tabs.contains(where: { $0.id == id }) {
+            // La pestaña activa sigue existiendo.
+        } else if let normal = tabs.last(where: { !$0.isPrivate }) {
+            activeTabID = normal.id
+        } else {
+            let replacement = makeTab(private: false)
+            tabs.append(replacement)
+            activeTabID = replacement.id
+        }
+        ensureNormalTab()
         refreshFromActiveTab()
+    }
+
+    /// Vuelve a las pestañas normales sin cerrar las privadas.
+    func leavePrivateMode() {
+        if let normal = tabs.last(where: { !$0.isPrivate }) {
+            selectTab(normal.id)
+        } else {
+            createTab()
+        }
+    }
+
+    private func ensureNormalTab() {
+        if !tabs.contains(where: { !$0.isPrivate }) {
+            tabs.append(makeTab(private: false))
+        }
+        if activeTabID == nil || !tabs.contains(where: { $0.id == activeTabID }) {
+            activeTabID = tabs.last(where: { !$0.isPrivate })?.id ?? tabs.first?.id
+        }
+    }
+
+    private func discardPrivateDataIfUnused() {
+        if !tabs.contains(where: { $0.isPrivate }) { BrowserTab.resetPrivateStore() }
     }
 
     func toggleDesktop() {
@@ -426,5 +507,6 @@ final class BrowserModel: NSObject, ObservableObject {
         isSecure = tab.currentURL?.scheme != "http"
         progress = tab.progress
         isHome = tab.isHome
+        isPrivate = tab.isPrivate
     }
 }

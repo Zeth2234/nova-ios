@@ -12,6 +12,12 @@ struct SettingsView: View {
     @State private var pickedItem: PhotosPickerItem?
     @State private var confirmClear = false
     @State private var cleared = false
+    @ObservedObject private var privacy = PrivacyStore.shared
+    @AppStorage("quickLogin") private var quickLogin = true
+    @AppStorage("quickAutoSubmit") private var quickAutoSubmit = true
+    @AppStorage("blockTrackers") private var blockTrackers = true
+    @State private var showVault = false
+    @State private var vaultCount = Vault.all.count
 
     private var engine: SearchEngine { SearchEngine(rawValue: engineRaw) ?? .google }
     private var version: String {
@@ -31,6 +37,8 @@ struct SettingsView: View {
                     searchGroup
                     homeGroup
                     backgroundGroup
+                    securityGroup
+                    quickLoginGroup
                     privacyGroup
                     aboutGroup
                 }
@@ -53,6 +61,9 @@ struct SettingsView: View {
                     pickedItem = nil
                 }
             }
+        }
+        .sheet(isPresented: $showVault, onDismiss: { vaultCount = Vault.all.count }) {
+            SavedLoginsView()
         }
         .confirmationDialog("¿Borrar los datos de navegación?",
                             isPresented: $confirmClear,
@@ -235,6 +246,108 @@ struct SettingsView: View {
             Slider(value: value, in: range)
                 .tint(NovaTheme.accent)
         }
+    }
+
+    // MARK: Seguridad (Face ID) y navegación privada
+
+    private var lockAppBinding: Binding<Bool> {
+        Binding(
+            get: { privacy.lockApp },
+            set: { on in
+                // Se confirma con Face ID antes de cambiar el ajuste, para no quedarse bloqueado fuera.
+                privacy.authenticate(reason: on ? "Confirma para activar el bloqueo de Nova"
+                                                : "Confirma para desactivar el bloqueo de Nova") { ok in
+                    if ok { privacy.lockApp = on }
+                }
+            }
+        )
+    }
+
+    private var lockPrivateBinding: Binding<Bool> {
+        Binding(
+            get: { privacy.lockPrivate },
+            set: { on in
+                privacy.authenticate(reason: "Confirma para cambiar la protección de la navegación privada") { ok in
+                    if ok { privacy.lockPrivate = on }
+                }
+            }
+        )
+    }
+
+    private var securityGroup: some View {
+        SettingsGroup("Seguridad y modo privado",
+                      footer: "Con el bloqueo activo, Nova pide \(PrivacyStore.biometryName) al abrirla y al volver de segundo plano. El contenido se oculta en el selector de apps.") {
+            toggleRow(symbol: "faceid", tint: NovaTheme.accent,
+                      title: "Bloquear Nova con \(PrivacyStore.biometryName)",
+                      detail: "Al abrir y al volver a la app",
+                      isOn: lockAppBinding)
+            RowDivider(inset: 60)
+            toggleRow(symbol: "eye.slash.fill", tint: PrivateTheme.accent,
+                      title: "Proteger navegación privada",
+                      detail: "Pide \(PrivacyStore.biometryName) para abrir pestañas privadas",
+                      isOn: lockPrivateBinding)
+            RowDivider(inset: 60)
+            toggleRow(symbol: "shield.lefthalf.filled", tint: NovaTheme.good,
+                      title: "Bloquear rastreadores",
+                      detail: "Anuncios y analíticas de terceros en pestañas privadas",
+                      isOn: $blockTrackers)
+        }
+    }
+
+    private var quickLoginGroup: some View {
+        SettingsGroup("Inicio rápido",
+                      footer: "Las contraseñas se guardan en el llavero del iPhone y solo se leen con \(PrivacyStore.biometryName). Las passkeys de los sitios no funcionan en Nova (iOS las reserva a apps con permiso especial de Apple), así que Nova usa tu contraseña con \(PrivacyStore.biometryName). No se guardan contraseñas en pestañas privadas.") {
+            toggleRow(symbol: "key.fill", tint: NovaTheme.accent2,
+                      title: "Guardar e iniciar sesión rápido",
+                      detail: "Ofrece guardar y rellenar con \(PrivacyStore.biometryName)",
+                      isOn: $quickLogin)
+            RowDivider(inset: 60)
+            toggleRow(symbol: "paperplane.fill", tint: NovaTheme.accent,
+                      title: "Entrar automáticamente",
+                      detail: "Pulsa «Iniciar sesión» tras rellenar",
+                      isOn: $quickAutoSubmit)
+            RowDivider(inset: 60)
+            Button { showVault = true } label: {
+                HStack(spacing: 12) {
+                    IconTile(symbol: "list.bullet.rectangle.fill", tint: NovaTheme.warn)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Contraseñas guardadas")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white)
+                        Text(vaultCount == 1 ? "1 cuenta" : "\(vaultCount) cuentas")
+                            .font(.system(size: 12))
+                            .foregroundColor(NovaTheme.dim)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(NovaTheme.faint)
+                }
+                .padding(14)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func toggleRow(symbol: String, tint: Color, title: String, detail: String,
+                           isOn: Binding<Bool>) -> some View {
+        HStack(spacing: 12) {
+            IconTile(symbol: symbol, tint: tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
+                Text(detail)
+                    .font(.system(size: 12))
+                    .foregroundColor(NovaTheme.dim)
+            }
+            Spacer()
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .tint(tint)
+        }
+        .padding(14)
     }
 
     private var privacyGroup: some View {

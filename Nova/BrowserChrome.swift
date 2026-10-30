@@ -100,7 +100,8 @@ struct AddressBar: View {
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .strokeBorder(isEditing ? NovaTheme.accent.opacity(0.85) : Color.white.opacity(0.11),
+                .strokeBorder(isEditing ? (model.isPrivate ? PrivateTheme.accent : NovaTheme.accent).opacity(0.85)
+                                        : (model.isPrivate ? PrivateTheme.accent.opacity(0.38) : Color.white.opacity(0.11)),
                               lineWidth: isEditing ? 1.4 : 1)
         )
         .shadow(color: .black.opacity(0.30), radius: 14, y: 6)
@@ -173,6 +174,14 @@ struct AddressBar: View {
                         .font(.system(size: 8, weight: .bold))
                     Text(model.isSecure ? "Conexión segura" : "Conexión no segura")
                         .font(.system(size: 11, weight: .medium))
+                    if model.isPrivate {
+                        Image(systemName: "eye.slash.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(PrivateTheme.accent)
+                        Text("Privada")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(PrivateTheme.accent)
+                    }
                     if model.activeTab.desktopMode {
                         Text("· Escritorio")
                             .font(.system(size: 11, weight: .medium))
@@ -265,7 +274,7 @@ struct AddressBar: View {
     private var newTabButton: some View {
         Button {
             Haptics.tap()
-            model.createTab()
+            model.createTab(private: model.isPrivate)
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 20, weight: .medium))
@@ -323,6 +332,7 @@ struct BottomBar: View {
     var openTabs: () -> Void
     var openEQ: () -> Void = {}
     var eqOn = false
+    var newPrivateTab: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 0) {
@@ -352,11 +362,11 @@ struct BottomBar: View {
         } label: {
             Text("\(min(model.tabCount, 99))")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundColor(.white.opacity(0.92))
+                .foregroundColor(model.isPrivate ? PrivateTheme.accent : Color.white.opacity(0.92))
                 .frame(width: 22, height: 22)
                 .overlay(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .stroke(Color.white.opacity(0.9), lineWidth: 1.7)
+                        .stroke(model.isPrivate ? PrivateTheme.accent : Color.white.opacity(0.9), lineWidth: 1.7)
                 )
                 .frame(maxWidth: .infinity, minHeight: 46)
                 .contentShape(Rectangle())
@@ -376,6 +386,15 @@ struct BottomBar: View {
                     Haptics.success()
                 } label: {
                     Label("Copiar enlace", systemImage: "link")
+                }
+            }
+            if model.isPrivate {
+                Button { model.leavePrivateMode() } label: {
+                    Label("Salir del modo privado", systemImage: "eye")
+                }
+            } else {
+                Button(action: newPrivateTab) {
+                    Label("Nueva pestaña privada", systemImage: "eye.slash")
                 }
             }
             Button(action: openSettings) {

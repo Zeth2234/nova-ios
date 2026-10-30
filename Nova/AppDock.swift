@@ -33,8 +33,9 @@ extension BrowserModel {
     static let maxDockApps = 4
 
     /// Pestañas que cuentan como "app": sitios reconocidos o cualquier pestaña que esté sonando.
+    /// Las pestañas privadas nunca aparecen aquí para no mostrar su actividad.
     var dockTabs: [BrowserTab] {
-        tabs.filter { $0.hasPage && (AppCatalog.match(host: $0.host) != nil || $0.isPlayingAudio) }
+        tabs.filter { !$0.isPrivate && $0.hasPage && (AppCatalog.match(host: $0.host) != nil || $0.isPlayingAudio) }
     }
 
     /// Si hay más de 4, cierra la más antigua que no esté activa ni sonando.
