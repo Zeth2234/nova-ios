@@ -118,3 +118,17 @@ TEMA CLARO / OSCURO / SISTEMA
   (las que soportan modo oscuro lo siguen).
 - Con foto de fondo en el inicio, el reloj y los textos sueltos siguen en blanco
   para que se lean sobre la imagen.
+
+FONDO DE INICIO: FOTO, GIF Y VIDEO + EDITOR TIPO DISCORD
+========================================================
+- Configuración > Fondo de inicio: ahora el selector admite fotos, GIFs y vídeos
+  (los vídeos se reproducen sin sonido y en bucle).
+- Al elegir un archivo se abre el editor: arrastra para mover, pellizca o usa el
+  deslizador para el zoom, botón de girar 90°, Restablecer, Cancelar y Aplicar.
+- El recuadro tiene la proporción exacta de la pantalla del iPhone y muestra una
+  maqueta del inicio (reloj, buscador, accesos) para ver cómo quedará. El ojo
+  oculta/muestra la maqueta.
+- El botón del recorte junto a la papelera (o tocar la miniatura) reabre el editor
+  para reajustar el fondo actual sin volver a elegirlo.
+- Corregido: project.yml forzaba el modo oscuro (UIUserInterfaceStyle: Dark), lo que
+  impedía que "Sistema" siguiera el modo claro del iPhone.

@@ -1,6 +1,7 @@
 import SwiftUI
 import WebKit
 import PhotosUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -11,6 +12,7 @@ struct SettingsView: View {
     @AppStorage("bgDim") private var bgDim = 0.35
     @AppStorage("bgBlur") private var bgBlur = 0.0
     @State private var pickedItem: PhotosPickerItem?
+    @State private var editingDraft: BGDraft?
     @State private var confirmClear = false
     @State private var cleared = false
     @ObservedObject private var privacy = PrivacyStore.shared
@@ -52,17 +54,38 @@ struct SettingsView: View {
         .novaAppearance()
         .onChange(of: pickedItem) { item in
             guard let item = item else { return }
+            let isMovie = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
             Task {
-                let data = try? await item.loadTransferable(type: Data.self)
-                await MainActor.run {
-                    if let data = data {
-                        bg.set(data: data)
-                    } else {
-                        bg.fail("No se pudo abrir la foto seleccionada.")
+                if isMovie {
+                    let movie = try? await item.loadTransferable(type: PickedMovie.self)
+                    await MainActor.run {
+                        pickedItem = nil
+                        if let url = movie?.url {
+                            bg.makeDraft(movie: url) { editingDraft = $0 }
+                        } else {
+                            bg.fail("No se pudo abrir el vídeo seleccionado.")
+                        }
                     }
-                    pickedItem = nil
+                } else {
+                    let data = try? await item.loadTransferable(type: Data.self)
+                    await MainActor.run {
+                        pickedItem = nil
+                        if let data = data {
+                            bg.makeDraft(data: data) { editingDraft = $0 }
+                        } else {
+                            bg.fail("No se pudo abrir la foto seleccionada.")
+                        }
+                    }
                 }
             }
+        }
+        .fullScreenCover(item: $editingDraft) { draft in
+            BackgroundEditorView(draft: draft,
+                                 onApply: { tf in
+                                     bg.commit(draft, transform: tf)
+                                     editingDraft = nil
+                                 },
+                                 onCancel: { editingDraft = nil })
         }
         .sheet(isPresented: $showVault, onDismiss: { vaultCount = Vault.all.count }) {
             SavedLoginsView()
@@ -191,16 +214,16 @@ struct SettingsView: View {
 
     private var backgroundGroup: some View {
         SettingsGroup("Fondo de inicio",
-                      footer: "Admite fotos y GIFs animados. Los GIFs largos se optimizan para ahorrar memoria y batería.") {
+                      footer: "Admite fotos, GIFs y vídeos (los vídeos van sin sonido y en bucle). Ajusta zoom y posición como en el perfil de Discord.") {
             VStack(spacing: 14) {
                 backgroundPreview
 
                 HStack(spacing: 10) {
-                    PhotosPicker(selection: $pickedItem, matching: .images, photoLibrary: .shared()) {
+                    PhotosPicker(selection: $pickedItem, matching: .any(of: [.images, .videos]), photoLibrary: .shared()) {
                         HStack(spacing: 8) {
                             Image(systemName: "photo.on.rectangle.angled")
                                 .font(.system(size: 14, weight: .semibold))
-                            Text(bg.image == nil ? "Elegir foto o GIF" : "Cambiar fondo")
+                            Text(bg.image == nil ? "Elegir foto, GIF o vídeo" : "Cambiar")
                                 .font(.system(size: 14, weight: .semibold))
                         }
                         .foregroundColor(.white)
@@ -210,6 +233,20 @@ struct SettingsView: View {
                     }
 
                     if bg.image != nil {
+                        Button {
+                            Haptics.tap()
+                            editingDraft = bg.currentDraft()
+                        } label: {
+                            Image(systemName: "crop.rotate")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(NovaTheme.accent)
+                                .frame(width: 44, height: 44)
+                                .background(RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .fill(NovaTheme.accent.opacity(0.14)))
+                        }
+                        .buttonStyle(PressableStyle())
+                        .accessibilityLabel("Ajustar posición y zoom")
+
                         Button {
                             Haptics.tap()
                             bg.remove()
@@ -243,28 +280,32 @@ struct SettingsView: View {
     }
 
     private var backgroundPreview: some View {
-        ZStack {
-            NovaBackground()
-            HomeBackgroundView()
-            if bg.isProcessing {
-                ProgressView().tint(.white)
-            } else if bg.image == nil {
-                VStack(spacing: 6) {
-                    Image(systemName: "photo")
-                        .font(.system(size: 22, weight: .medium))
-                    Text("Sin fondo personalizado")
-                        .font(.system(size: 12, weight: .medium))
+        VStack(spacing: 8) {
+            ZStack {
+                BackgroundPhonePreview(image: bg.image, size: bg.mediaSize, tf: bg.transform,
+                                       height: 300, dim: bgDim, blur: bgBlur)
+                if bg.isProcessing {
+                    ProgressView().tint(.white)
+                } else if bg.image == nil {
+                    VStack(spacing: 6) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 22, weight: .medium))
+                        Text("Sin fondo personalizado")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundColor(NovaTheme.dim)
                 }
-                .foregroundColor(NovaTheme.dim)
-            } else {
-                Text("09:41")
-                    .font(.system(size: 46, weight: .thin))
-                    .foregroundColor(.white)
+            }
+            .onTapGesture {
+                if let d = bg.currentDraft() { Haptics.tap(); editingDraft = d }
+            }
+            if bg.image != nil {
+                Text("Así se verá en el inicio · toca para ajustar")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(NovaTheme.faint)
             }
         }
-        .frame(height: 170)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(NovaTheme.stroke, lineWidth: 1))
+        .frame(maxWidth: .infinity)
     }
 
     private func sliderRow(symbol: String, title: String,
