@@ -134,21 +134,109 @@ struct AddressBar: View {
     private var progressLine: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Rectangle().fill(Color.clear)
-                Rectangle()
-                    .fill(NovaTheme.accentGradient)
-                    .frame(width: geo.size.width * CGFloat(model.progress), height: 2)
-                    .opacity(model.isLoading ? 1 : 0)
+                Capsule().fill(Color.white.opacity(0.045))
+                if model.isLoading {
+                    let fraction = min(max(model.progress, 0.035), 1)
+                    Capsule()
+                        .fill(NovaTheme.accentGradient)
+                        .frame(width: max(12, geo.size.width * CGFloat(fraction)), height: 2.5)
+                        .shadow(color: NovaTheme.accent.opacity(0.65), radius: 5)
+                        .overlay(alignment: .trailing) {
+                            Circle()
+                                .fill(Color.white.opacity(0.95))
+                                .frame(width: 3, height: 3)
+                                .shadow(color: NovaTheme.accent2, radius: 4)
+                        }
+                        .transition(.opacity)
+                }
             }
             .clipped()
         }
-        .frame(height: 2)
+        .frame(height: 2.5)
+        .padding(.horizontal, 17)
+        .animation(.easeOut(duration: 0.22), value: model.progress)
+        .animation(.easeInOut(duration: 0.2), value: model.isLoading)
     }
 
     private func submit() {
         let value = model.addressText
         focused = false
         model.load(value)
+    }
+}
+
+// MARK: - Indicador animado de carga de página
+
+struct PageLoadingHUD: View {
+    let host: String
+    let progress: Double
+    @State private var isSpinning = false
+
+    private var percentage: Int {
+        Int(min(max(progress, 0), 1) * 100)
+    }
+
+    var body: some View {
+        HStack(spacing: 11) {
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.12), lineWidth: 2.5)
+                Circle()
+                    .trim(from: 0.08, to: 0.78)
+                    .stroke(NovaTheme.accentGradient,
+                            style: StrokeStyle(lineWidth: 2.8, lineCap: .round))
+                    .rotationEffect(.degrees(isSpinning ? 360 : 0))
+                Image(systemName: "sparkle")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white.opacity(0.9))
+            }
+            .frame(width: 27, height: 27)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 5) {
+                    Text("CARGANDO")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .tracking(1.0)
+                        .foregroundColor(NovaTheme.accent2)
+                    Circle()
+                        .fill(NovaTheme.accent2)
+                        .frame(width: 3, height: 3)
+                        .opacity(isSpinning ? 1 : 0.35)
+                }
+                Text(host.isEmpty ? "Preparando página…" : host)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.92))
+                    .lineLimit(1)
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.10))
+                        Capsule()
+                            .fill(NovaTheme.accentGradient)
+                            .frame(width: max(7, geo.size.width * CGFloat(min(max(progress, 0.035), 1))))
+                    }
+                }
+                .frame(height: 3)
+            }
+            .frame(maxWidth: 150, alignment: .leading)
+
+            Text("\(percentage)%")
+                .font(.system(size: 11, weight: .bold, design: .rounded).monospacedDigit())
+                .foregroundColor(.white.opacity(0.86))
+                .frame(minWidth: 31, alignment: .trailing)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(NovaTheme.surface.opacity(0.97)))
+        .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous)
+            .stroke(NovaTheme.accent.opacity(0.38), lineWidth: 1))
+        .shadow(color: NovaTheme.accent.opacity(0.16), radius: 18, y: 7)
+        .onAppear {
+            withAnimation(.linear(duration: 0.95).repeatForever(autoreverses: false)) {
+                isSpinning = true
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Cargando \(host), \(percentage) por ciento")
     }
 }
 

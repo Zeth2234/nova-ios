@@ -17,14 +17,26 @@ struct ContentView: View {
                         .background(NovaTheme.bg.opacity(0.97).ignoresSafeArea(edges: .top))
                 }
 
-                ZStack {
+                ZStack(alignment: .top) {
                     WebViewContainer(webView: model.webView)
                         .opacity(model.isHome ? 0 : 1)
                         .allowsHitTesting(!model.isHome)
+
                     if model.isHome {
                         HomeView(model: model)
+                            .transition(.opacity)
+                    } else if model.isLoading {
+                        PageLoadingHUD(host: model.host, progress: model.progress)
+                            .padding(.top, 13)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .opacity))
+                            .zIndex(2)
+                            .allowsHitTesting(false)
                     }
                 }
+                .animation(.spring(response: 0.38, dampingFraction: 0.84), value: model.isHome)
+                .animation(.easeInOut(duration: 0.22), value: model.isLoading)
 
                 BottomBar(model: model,
                           openSettings: { showSettings = true },

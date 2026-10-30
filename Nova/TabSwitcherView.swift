@@ -170,14 +170,7 @@ private struct TabRow: View {
         HStack(spacing: 10) {
             Button(action: select) {
                 HStack(spacing: 12) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(isActive ? NovaTheme.accent.opacity(0.19) : NovaTheme.surfaceHi)
-                            .frame(width: 43, height: 43)
-                        Image(systemName: tab.isHome ? "house.fill" : "globe")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundColor(isActive ? NovaTheme.accent : Color.white.opacity(0.78))
-                    }
+                    TabFaviconView(tab: tab, isActive: isActive)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(tab.title)
                             .font(.system(size: 13, weight: .semibold))
@@ -219,5 +212,49 @@ private struct TabRow: View {
             .fill(isActive ? NovaTheme.surfaceHi.opacity(0.95) : NovaTheme.surface.opacity(0.85)))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
             .stroke(isActive ? NovaTheme.accent.opacity(0.48) : NovaTheme.stroke, lineWidth: 1))
+    }
+}
+
+
+/// Muestra el favicon de cada web; solo recurre al icono genérico si la página
+/// no publica una imagen que iOS pueda decodificar.
+private struct TabFaviconView: View {
+    @ObservedObject var tab: BrowserTab
+    let isActive: Bool
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isActive ? NovaTheme.accent.opacity(0.19) : NovaTheme.surfaceHi)
+                .frame(width: 43, height: 43)
+
+            if let favicon = tab.faviconImage {
+                Image(uiImage: favicon)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .padding(8)
+                    .frame(width: 43, height: 43)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .transition(.opacity.combined(with: .scale(scale: 0.82)))
+            } else {
+                Image(systemName: tab.isHome ? "house.fill" : "globe")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundColor(isActive ? NovaTheme.accent : Color.white.opacity(0.78))
+                    .frame(width: 43, height: 43)
+            }
+
+            if tab.isLoading {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: NovaTheme.accent2))
+                    .scaleEffect(0.55)
+                    .frame(width: 17, height: 17)
+                    .background(Circle().fill(NovaTheme.surfaceHi))
+                    .overlay(Circle().stroke(NovaTheme.stroke, lineWidth: 1))
+                    .offset(x: 4, y: 4)
+            }
+        }
+        .animation(.spring(response: 0.34, dampingFraction: 0.78), value: tab.faviconImage != nil)
+        .accessibilityLabel(tab.faviconImage == nil ? (tab.isHome ? "Inicio" : "Icono del sitio") : "Icono de \(tab.host)")
     }
 }

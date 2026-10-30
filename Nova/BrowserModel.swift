@@ -14,9 +14,14 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
     @Published var isLoading = false
     @Published var progress: Double = 0
     @Published var isHome = true
+    /// Icono real declarado por el sitio web (favicon / apple-touch-icon).
+    @Published var faviconImage: UIImage?
 
     var onStateChange: (() -> Void)?
     private var observers: [NSKeyValueObservation] = []
+    private var faviconPageKey: String?
+    private var faviconTask: URLSessionDataTask?
+    private static let faviconCache = NSCache<NSURL, UIImage>()
 
     override init() {
         let config = WKWebViewConfiguration()
@@ -111,9 +116,114 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
     // MARK: WKNavigationDelegate
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { refreshState() }
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) { refreshState() }
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { refreshState() }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        refreshState()
+        refreshFavicon()
+    }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { refreshState() }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { refreshState() }
+
+    // MARK: Favicon del sitio
+    // Se consulta el icono que declara la propia página y se descarga como imagen.
+    // El icono queda asociado a esta pestaña, no a la pestaña activa global.
+    private func refreshFavicon() {
+        guard let pageURL = webView.url,
+              let host = pageURL.host,
+              pageURL.scheme == "https" || pageURL.scheme == "http" else { return }
+
+        let pageKey = "\(pageURL.scheme ?? "https")://\(host)"
+        guard faviconPageKey != pageKey else { return }
+        faviconPageKey = pageKey
+        faviconTask?.cancel()
+        faviconImage = nil
+
+        let script = """
+        (function() {
+            const links = Array.from(document.querySelectorAll('link[rel*="icon"], link[rel*="apple-touch-icon"]'));
+            const rank = (link) => {
+                const rel = (link.rel || '').toLowerCase();
+                const type = (link.type || '').toLowerCase();
+                const href = (link.href || '').toLowerCase();
+                if (rel.includes('apple-touch-icon')) return 0;
+                if (type.includes('png') || ['.png', '.webp', '.jpg', '.jpeg'].some(ext => href.includes(ext))) return 1;
+                if (type.includes('svg') || href.includes('.svg')) return 3;
+                return 2;
+            };
+            links.sort((a, b) => rank(a) - rank(b));
+            return links.length ? links[0].href : '';
+        })();
+        """
+
+        webView.evaluateJavaScript(script) { [weak self] result, _ in
+            DispatchQueue.main.async {
+                guard let self = self,
+                      self.webView.url?.host == host,
+                      self.faviconPageKey == pageKey else { return }
+
+                let declaredURL = (result as? String).flatMap { value -> URL? in
+                    guard !value.isEmpty else { return nil }
+                    return URL(string: value, relativeTo: pageURL)?.absoluteURL
+                }
+                let fallbackURLs = [
+                    URL(string: "/apple-touch-icon.png", relativeTo: pageURL)?.absoluteURL,
+                    URL(string: "/favicon.ico", relativeTo: pageURL)?.absoluteURL
+                ].compactMap { $0 }
+                var candidates = declaredURL.map { [$0] } ?? []
+                candidates.append(contentsOf: fallbackURLs)
+                candidates = candidates.reduce(into: [URL]()) { result, candidate in
+                    if !result.contains(candidate) { result.append(candidate) }
+                }
+                candidates = candidates.filter { candidate in
+                    candidate.scheme == "https" || candidate.scheme == "http"
+                }
+                self.downloadFavicon(from: candidates, pageKey: pageKey)
+            }
+        }
+    }
+
+    private func downloadFavicon(from candidates: [URL], index: Int = 0, pageKey: String) {
+        guard faviconPageKey == pageKey, index < candidates.count else { return }
+        let url = candidates[index]
+        let cacheKey = url as NSURL
+        if let cached = Self.faviconCache.object(forKey: cacheKey) {
+            faviconImage = cached
+            notifyStateChange()
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        request.cachePolicy = .returnCacheDataElseLoad
+        faviconTask = URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
+            guard let self = self, self.faviconPageKey == pageKey else { return }
+            let image: UIImage? = {
+                guard let response = response as? HTTPURLResponse,
+                      (200..<300).contains(response.statusCode),
+                      let data = data,
+                      data.count <= 2_000_000 else { return nil }
+                return UIImage(data: data)
+            }()
+
+            if let image = image {
+                Self.faviconCache.setObject(image, forKey: cacheKey)
+                DispatchQueue.main.async {
+                    guard self.faviconPageKey == pageKey,
+                          self.webView.url?.host == URL(string: pageKey)?.host else { return }
+                    self.faviconImage = image
+                    self.notifyStateChange()
+                }
+            } else {
+                // Si el sitio solo ofrece SVG/ICO no compatible, prueba el
+                // apple-touch-icon y después /favicon.ico, sin pedir servicios externos.
+                DispatchQueue.main.async {
+                    guard self.faviconPageKey == pageKey,
+                          self.webView.url?.host == URL(string: pageKey)?.host else { return }
+                    self.downloadFavicon(from: candidates, index: index + 1, pageKey: pageKey)
+                }
+            }
+        }
+        faviconTask?.resume()
+    }
 
     // MARK: WKUIDelegate
     // Conserva el comportamiento anterior: los target=_blank se abren en esta pestaña.

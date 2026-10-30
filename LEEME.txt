@@ -43,3 +43,17 @@ MEJORAS DE NAVEGACION INCLUIDAS
 La compilación IPA sigue realizándose desde GitHub Actions en macOS, siguiendo
 los pasos anteriores. El entorno donde se preparó este ZIP no incluye Xcode ni
 el SDK de iOS para generar un IPA localmente.
+
+ICONOS REALES Y ANIMACIONES DE CARGA
+===================================
+- Cada pestaña consulta el favicon que declara su propia página web.
+- Se priorizan apple-touch-icon e imágenes PNG/WebP/JPG, y se prueban
+  alternativas del propio dominio si el icono principal no se puede leer.
+- Los favicons se guardan en caché durante la sesión para evitar descargas
+  repetidas al abrir y cerrar el selector de pestañas.
+- El selector muestra el icono real junto al título y dominio de cada página.
+- Las pestañas que siguen cargando muestran un pequeño indicador animado.
+- Al navegar aparece un indicador flotante con spinner, dominio y progreso,
+  además de una línea de progreso con brillo en la barra de direcciones.
+- Los indicadores no interceptan toques ni bloquean el desplazamiento de la web.
+- Si una página no ofrece un icono compatible, Nova conserva el icono genérico.
