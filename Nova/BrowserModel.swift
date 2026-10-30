@@ -43,6 +43,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
         })();
         """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         config.userContentController.addUserScript(keepAlive)
+        config.userContentController.addUserScript(EQModel.shared.userScript) // ecualizador global
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = true
@@ -277,6 +278,8 @@ final class BrowserModel: NSObject, ObservableObject {
         tabs = [firstTab]
         activeTabID = firstTab.id
         refreshFromActiveTab()
+        EQModel.shared.webViews = { [weak self] in self?.tabs.map { $0.webView } ?? [] }
+        EQModel.shared.activeWebView = { [weak self] in self?.webView }
         Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             self?.pollAudioState()
         }

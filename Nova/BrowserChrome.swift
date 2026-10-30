@@ -254,6 +254,8 @@ struct BottomBar: View {
     @ObservedObject var model: BrowserModel
     var openSettings: () -> Void
     var openTabs: () -> Void
+    var openEQ: () -> Void = {}
+    var eqOn = false
 
     var body: some View {
         HStack(spacing: 2) {
@@ -295,6 +297,8 @@ struct BottomBar: View {
                 icon("square.and.arrow.up", enabled: false)
                     .accessibilityLabel("Compartir página")
             }
+            Button(action: openEQ) { icon("waveform", tint: eqOn ? NovaTheme.accent : nil) }
+                .accessibilityLabel("Ecualizador")
             Button(action: openSettings) { icon("slider.horizontal.3") }
                 .accessibilityLabel("Configuración")
         }

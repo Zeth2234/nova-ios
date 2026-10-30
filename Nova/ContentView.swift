@@ -4,6 +4,8 @@ struct ContentView: View {
     @StateObject private var model = BrowserModel()
     @State private var showSettings = false
     @State private var showTabs = false
+    @State private var showEQ = false
+    @ObservedObject private var eq = EQModel.shared
 
     var body: some View {
         ZStack {
@@ -41,13 +43,20 @@ struct ContentView: View {
 
                 BottomBar(model: model,
                           openSettings: { showSettings = true },
-                          openTabs: { showTabs = true })
+                          openTabs: { showTabs = true },
+                          openEQ: { showEQ = true },
+                          eqOn: eq.s.enabled)
                     .background(NovaTheme.bg.opacity(0.97).ignoresSafeArea(edges: .bottom))
             }
         }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showSettings) {
             SettingsView()
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showEQ) {
+            EQSheet(host: model.isHome ? "Todas las pestañas" : model.host)
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showTabs) {

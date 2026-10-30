@@ -66,3 +66,11 @@ PANEL DE APPS (maximo 4 en segundo plano)
 - La app que estas viendo lleva borde violeta con brillo. Mantén pulsado un icono para cerrarla.
 - Si abres una quinta app, se cierra la mas antigua que no este activa ni sonando.
 - Audio en segundo plano: AVAudioSession(.playback) + UIBackgroundModes=audio (project.yml).
+
+ECUALIZADOR GLOBAL
+==================
+- Boton de onda en la barra inferior. Archivo: Nova/Equalizer.swift.
+- 13 bandas (10 Hz a 20 kHz), preamp, presets, graves, brillo, estereo, balance,
+  sonoridad, limitador, mono y espectro en vivo.
+- Se aplica a todas las pestañas con Web Audio. Limite: solo actua sobre audio/video
+  de la propia web (blob/mismo origen). Contenido con DRM (p. ej. Spotify) no se puede ecualizar.
