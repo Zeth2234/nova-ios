@@ -116,7 +116,7 @@ struct DockItemView: View {
             .frame(width: 52, height: 52)
             .scaleEffect(isActive ? 1.0 : 0.94)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
         .contextMenu {
             Button(role: .destructive, action: onClose) {
                 Label("Cerrar \(info?.name ?? "app")", systemImage: "xmark.circle")
@@ -176,9 +176,11 @@ struct AppDockView: View {
             .padding(.horizontal, 10).padding(.vertical, 8)
             .background(
                 Capsule().fill(.ultraThinMaterial)
-                    .overlay(Capsule().fill(NovaTheme.surface.opacity(0.72)))
+                    .overlay(Capsule().fill(NovaTheme.surface.opacity(0.78)))
             )
-            .overlay(Capsule().stroke(NovaTheme.stroke, lineWidth: 1))
+            .overlay(Capsule().strokeBorder(
+                LinearGradient(colors: [Color.white.opacity(0.16), Color.white.opacity(0.05)],
+                               startPoint: .top, endPoint: .bottom), lineWidth: 1))
             .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
             .animation(.spring(response: 0.38, dampingFraction: 0.8), value: apps.map { $0.id })
             .padding(.bottom, 10)

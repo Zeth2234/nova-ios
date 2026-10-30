@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Paleta Nova
 
@@ -14,18 +15,39 @@ extension Color {
 
 enum NovaTheme {
     // Grafito azulado con acentos violeta/azul: contraste alto sin neón excesivo.
-    static let bg        = Color(hex: 0x080B14)
-    static let surface   = Color(hex: 0x111725)
-    static let surfaceHi = Color(hex: 0x1A2333)
+    static let bg        = Color(hex: 0x070A12)
+    static let surface   = Color(hex: 0x0F1522)
+    static let surfaceHi = Color(hex: 0x182030)
     static let stroke    = Color.white.opacity(0.085)
     static let accent    = Color(hex: 0x8D7CFF)
     static let accent2   = Color(hex: 0x57A7FF)
     static let dim       = Color.white.opacity(0.58)
+    static let faint     = Color.white.opacity(0.36)
     static let good      = Color(hex: 0x47D5A1)
+    static let warn      = Color(hex: 0xFFAA4D)
+    static let danger    = Color(hex: 0xFF6B85)
 
     static let accentGradient = LinearGradient(
         colors: [accent, accent2],
         startPoint: .topLeading, endPoint: .bottomTrailing)
+}
+
+// MARK: - Interacción
+
+enum Haptics {
+    static func tap() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+    static func select() { UISelectionFeedbackGenerator().selectionChanged() }
+    static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+}
+
+/// Botón con respuesta táctil sutil (escala + opacidad) para toda la interfaz.
+struct PressableStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .opacity(configuration.isPressed ? 0.82 : 1)
+            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
+    }
 }
 
 extension View {
@@ -34,6 +56,25 @@ extension View {
         self
             .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(NovaTheme.surface))
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(NovaTheme.stroke, lineWidth: 1))
+    }
+
+    /// Superficie de cristal: material translúcido + tinte + borde con degradado + sombra.
+    func novaGlass(radius: CGFloat = 18, shadow: Bool = true) -> some View {
+        self
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous).fill(.ultraThinMaterial)
+                    RoundedRectangle(cornerRadius: radius, style: .continuous).fill(NovaTheme.surface.opacity(0.80))
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(colors: [Color.white.opacity(0.16), Color.white.opacity(0.05)],
+                                       startPoint: .top, endPoint: .bottom),
+                        lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(shadow ? 0.30 : 0), radius: 14, y: 6)
     }
 }
 

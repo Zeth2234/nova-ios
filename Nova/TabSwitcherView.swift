@@ -1,99 +1,44 @@
 import SwiftUI
 
-/// Panel de gestión de pestañas: permite cambiar, abrir y cerrar páginas.
+/// Panel de gestión de pestañas: cuadrícula de tarjetas para cambiar, abrir y cerrar páginas.
 struct TabSwitcherView: View {
     @ObservedObject var model: BrowserModel
     @Environment(\.dismiss) private var dismiss
     @State private var confirmCloseAll = false
 
+    private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+
     var body: some View {
         ZStack {
             NovaTheme.bg.ignoresSafeArea()
-            RadialGradient(colors: [NovaTheme.accent.opacity(0.20), .clear],
-                           center: .topTrailing, startRadius: 0, endRadius: 400)
+            RadialGradient(colors: [NovaTheme.accent.opacity(0.18), .clear],
+                           center: .topTrailing, startRadius: 0, endRadius: 420)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 header
                 ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 15) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Tu espacio de navegación")
-                                    .font(.system(size: 17, weight: .bold))
-                                    .foregroundColor(.white)
-                                Text("Cambia entre páginas o libera las que ya no necesitas.")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(NovaTheme.dim)
-                            }
-                            Spacer(minLength: 0)
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        ForEach(model.tabs) { tab in
+                            TabCard(tab: tab,
+                                    isActive: tab.id == model.activeTabID,
+                                    select: {
+                                        Haptics.tap()
+                                        model.selectTab(tab.id)
+                                        dismiss()
+                                    },
+                                    close: {
+                                        Haptics.tap()
+                                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                                            model.closeTab(tab.id)
+                                        }
+                                    })
+                                .transition(.scale(scale: 0.9).combined(with: .opacity))
                         }
-                        .padding(.top, 17)
-
-                        LazyVStack(spacing: 9) {
-                            ForEach(model.tabs) { tab in
-                                TabRow(tab: tab,
-                                       isActive: tab.id == model.activeTabID,
-                                       select: {
-                                           model.selectTab(tab.id)
-                                           dismiss()
-                                       },
-                                       close: {
-                                           withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                                               model.closeTab(tab.id)
-                                           }
-                                       })
-                            }
-                        }
-
-                        Button {
-                            model.createTab()
-                            dismiss()
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(NovaTheme.accent)
-                                    .frame(width: 42, height: 42)
-                                    .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(NovaTheme.accent.opacity(0.14)))
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Abrir nueva pestaña")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundColor(.white)
-                                    Text("Empieza una página desde cero")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(NovaTheme.dim)
-                                }
-                                Spacer()
-                                Image(systemName: "arrow.up.right")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundColor(NovaTheme.dim)
-                            }
-                            .padding(12)
-                            .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(NovaTheme.surface.opacity(0.76)))
-                            .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(NovaTheme.accent.opacity(0.32), style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.top, 3)
-
-                        if model.tabs.count > 1 {
-                            Button(role: .destructive) {
-                                confirmCloseAll = true
-                            } label: {
-                                HStack(spacing: 7) {
-                                    Image(systemName: "xmark.circle")
-                                    Text("Cerrar todas las pestañas")
-                                }
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(Color(hex: 0xFF718B))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.top, 2)
-                        }
+                        newTabCard
                     }
                     .padding(.horizontal, 18)
+                    .padding(.top, 16)
                     .padding(.bottom, 28)
                 }
             }
@@ -110,111 +55,149 @@ struct TabSwitcherView: View {
         }
     }
 
+    // MARK: Cabecera
+
     private var header: some View {
-        HStack(spacing: 11) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(NovaTheme.accentGradient)
-                    .frame(width: 38, height: 38)
-                Image(systemName: "square.on.square")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
-            }
-            VStack(alignment: .leading, spacing: 1) {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Pestañas")
-                    .font(.system(size: 19, weight: .bold))
+                    .font(.system(size: 24, weight: .bold))
                     .foregroundColor(.white)
-                Text("\(model.tabCount) abiertas")
-                    .font(.system(size: 11, weight: .medium))
+                Text(model.tabCount == 1 ? "1 abierta" : "\(model.tabCount) abiertas")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundColor(NovaTheme.dim)
             }
             Spacer()
+
+            if model.tabs.count > 1 {
+                Menu {
+                    Button(role: .destructive) {
+                        confirmCloseAll = true
+                    } label: {
+                        Label("Cerrar todas las pestañas", systemImage: "xmark.circle")
+                    }
+                } label: {
+                    roundIcon("ellipsis", filled: false)
+                }
+                .accessibilityLabel("Más opciones")
+            }
+
             Button {
+                Haptics.tap()
                 model.createTab()
                 dismiss()
             } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.white)
-                    .frame(width: 38, height: 38)
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NovaTheme.accent))
+                roundIcon("plus", filled: true)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableStyle())
             .accessibilityLabel("Añadir pestaña")
+
             Button { dismiss() } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(NovaTheme.dim)
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(NovaTheme.surfaceHi))
-                    .overlay(Circle().stroke(NovaTheme.stroke, lineWidth: 1))
+                roundIcon("xmark", filled: false)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableStyle())
             .accessibilityLabel("Cerrar panel de pestañas")
         }
         .padding(.horizontal, 18)
-        .padding(.top, 18)
+        .padding(.top, 20)
         .padding(.bottom, 14)
-        .background(NovaTheme.bg.opacity(0.95))
         .overlay(alignment: .bottom) { Rectangle().fill(NovaTheme.stroke).frame(height: 1) }
+    }
+
+    private func roundIcon(_ symbol: String, filled: Bool) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 14, weight: .bold))
+            .foregroundColor(filled ? .white : NovaTheme.dim)
+            .frame(width: 38, height: 38)
+            .background(
+                Circle().fill(filled ? AnyShapeStyle(NovaTheme.accentGradient)
+                                     : AnyShapeStyle(NovaTheme.surfaceHi))
+            )
+            .overlay(Circle().stroke(filled ? Color.clear : NovaTheme.stroke, lineWidth: 1))
+    }
+
+    // MARK: Tarjeta "nueva pestaña"
+
+    private var newTabCard: some View {
+        Button {
+            Haptics.tap()
+            model.createTab()
+            dismiss()
+        } label: {
+            VStack(spacing: 10) {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(NovaTheme.accent)
+                    .frame(width: 42, height: 42)
+                    .background(Circle().fill(NovaTheme.accent.opacity(0.14)))
+                Text("Nueva pestaña")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.9))
+            }
+            .frame(maxWidth: .infinity, minHeight: 124)
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(NovaTheme.surface.opacity(0.5)))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(NovaTheme.accent.opacity(0.32), style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
+        }
+        .buttonStyle(PressableStyle())
     }
 }
 
-private struct TabRow: View {
+// MARK: - Tarjeta de pestaña
+
+private struct TabCard: View {
     @ObservedObject var tab: BrowserTab
     let isActive: Bool
     let select: () -> Void
     let close: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            Button(action: select) {
-                HStack(spacing: 12) {
-                    TabFaviconView(tab: tab, isActive: isActive)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(tab.title)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                        Text(tab.isHome ? "Página de inicio" : tab.host)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(NovaTheme.dim)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 4)
+        Button(action: select) {
+            VStack(alignment: .leading, spacing: 0) {
+                TabFaviconView(tab: tab, isActive: isActive)
+                Spacer(minLength: 12)
+                Text(tab.isHome ? "Nueva pestaña" : tab.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                HStack(spacing: 5) {
                     if isActive {
-                        Text("ACTIVA")
-                            .font(.system(size: 8, weight: .bold, design: .rounded))
-                            .tracking(0.8)
-                            .foregroundColor(NovaTheme.accent)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 5)
-                            .background(Capsule().fill(NovaTheme.accent.opacity(0.13)))
+                        Circle().fill(NovaTheme.accent).frame(width: 5, height: 5)
                     }
+                    Text(tab.isHome ? "Página de inicio" : tab.host)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(isActive ? NovaTheme.accent.opacity(0.95) : NovaTheme.dim)
+                        .lineLimit(1)
                 }
-                .contentShape(Rectangle())
+                .padding(.top, 3)
             }
-            .buttonStyle(.plain)
-
+            .padding(13)
+            .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(isActive ? NovaTheme.surfaceHi : NovaTheme.surface))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(isActive ? NovaTheme.accent.opacity(0.65) : NovaTheme.stroke,
+                        lineWidth: isActive ? 1.5 : 1))
+            .shadow(color: isActive ? NovaTheme.accent.opacity(0.22) : .clear, radius: 12, y: 4)
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+        .buttonStyle(PressableStyle())
+        .overlay(alignment: .topTrailing) {
             Button(action: close) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundColor(NovaTheme.dim)
-                    .frame(width: 31, height: 31)
-                    .background(Circle().fill(Color.white.opacity(0.055)))
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Color.white.opacity(0.07)))
+                    .padding(9)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableStyle())
             .accessibilityLabel("Cerrar pestaña \(tab.title)")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(isActive ? NovaTheme.surfaceHi.opacity(0.95) : NovaTheme.surface.opacity(0.85)))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .stroke(isActive ? NovaTheme.accent.opacity(0.48) : NovaTheme.stroke, lineWidth: 1))
     }
 }
-
 
 /// Muestra el favicon de cada web; solo recurre al icono genérico si la página
 /// no publica una imagen que iOS pueda decodificar.
@@ -224,9 +207,9 @@ private struct TabFaviconView: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .fill(isActive ? NovaTheme.accent.opacity(0.19) : NovaTheme.surfaceHi)
-                .frame(width: 43, height: 43)
+                .frame(width: 42, height: 42)
 
             if let favicon = tab.faviconImage {
                 Image(uiImage: favicon)
@@ -234,14 +217,14 @@ private struct TabFaviconView: View {
                     .interpolation(.high)
                     .scaledToFit()
                     .padding(8)
-                    .frame(width: 43, height: 43)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .frame(width: 42, height: 42)
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                     .transition(.opacity.combined(with: .scale(scale: 0.82)))
             } else {
                 Image(systemName: tab.isHome ? "house.fill" : "globe")
                     .font(.system(size: 17, weight: .medium))
                     .foregroundColor(isActive ? NovaTheme.accent : Color.white.opacity(0.78))
-                    .frame(width: 43, height: 43)
+                    .frame(width: 42, height: 42)
             }
 
             if tab.isLoading {

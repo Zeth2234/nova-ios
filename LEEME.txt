@@ -29,21 +29,6 @@ La compilación IPA sigue realizándose desde GitHub Actions en macOS, siguiendo
 los pasos anteriores. El entorno donde se preparó este ZIP no incluye Xcode ni
 el SDK de iOS para generar un IPA localmente.
 
-MEJORAS DE NAVEGACION INCLUIDAS
-===============================
-- Pestañas independientes: cada una conserva su propia página e historial.
-- Selector de pestañas con título, dominio y estado de pestaña activa.
-- Cierre individual, cierre de todas y creación de pestañas nuevas.
-- Cambio real del WKWebView visible al seleccionar otra pestaña.
-- Barra de direcciones mejorada en páginas abiertas, con estado de conexión,
-  edición de dirección/búsqueda, recarga/detención y acceso directo a nueva pestaña.
-- Barra inferior renovada con contador de pestañas.
-- Paleta visual más sobria y superficies con mejor jerarquía y contraste.
-
-La compilación IPA sigue realizándose desde GitHub Actions en macOS, siguiendo
-los pasos anteriores. El entorno donde se preparó este ZIP no incluye Xcode ni
-el SDK de iOS para generar un IPA localmente.
-
 ICONOS REALES Y ANIMACIONES DE CARGA
 ===================================
 - Cada pestaña consulta el favicon que declara su propia página web.
@@ -74,3 +59,16 @@ ECUALIZADOR GLOBAL
   sonoridad, limitador, mono y espectro en vivo.
 - Se aplica a todas las pestañas con Web Audio. Limite: solo actua sobre audio/video
   de la propia web (blob/mismo origen). Contenido con DRM (p. ej. Spotify) no se puede ecualizar.
+
+REDISENO DE INTERFAZ
+====================
+- Barra superior nueva (BrowserChrome.swift + Omnibox.swift): icono real del sitio (menu de
+  compartir / copiar / abrir en Safari / version de ordenador), dominio grande, estado de
+  conexion, anillo de progreso en el boton de recarga y linea de progreso integrada.
+- Al tocar la barra se expande: campo nativo que selecciona toda la URL, boton Cancelar y
+  panel de sugerencias (Ir a / Buscar con tu buscador / Copiar / Compartir).
+- El indicador flotante de carga se sustituyo por el progreso integrado en la barra.
+- Barra inferior flotante de cristal: contador de pestanas estilo Safari, estado activo en
+  inicio/ecualizador y menu "mas" (compartir, copiar enlace, configuracion).
+- Pestanas en cuadricula de tarjetas. Inicio con saludo, reloj HH:mm y accesos con color de marca.
+- Configuracion reorganizada en grupos. Vibracion suave en las acciones principales.

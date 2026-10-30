@@ -16,23 +16,21 @@ struct SettingsView: View {
     var body: some View {
         ZStack {
             NovaTheme.bg.ignoresSafeArea()
-            RadialGradient(colors: [Color(hex: 0x4B2FB8, opacity: 0.35), .clear],
+            RadialGradient(colors: [Color(hex: 0x4B2FB8, opacity: 0.30), .clear],
                            center: .topTrailing, startRadius: 0, endRadius: 420)
                 .ignoresSafeArea()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 26) {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 24) {
                     header
-                    hero
-                    summaryCards
-                    searchSection
-                    homeSection
-                    privacySection
-                    footer
+                    searchGroup
+                    homeGroup
+                    privacyGroup
+                    aboutGroup
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 18)
                 .padding(.top, 22)
-                .padding(.bottom, 30)
+                .padding(.bottom, 32)
             }
         }
         .preferredColorScheme(.dark)
@@ -46,99 +44,68 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: Secciones
+    // MARK: Cabecera
 
     private var header: some View {
         HStack(spacing: 12) {
-            NovaMark(size: 36)
+            NovaMark(size: 38)
             VStack(alignment: .leading, spacing: 2) {
-                Text("NOVA BROWSER")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .tracking(1.6)
-                    .foregroundColor(NovaTheme.dim)
                 Text("Configuración")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: 24, weight: .bold))
                     .foregroundColor(.white)
+                Text("Nova \(version)")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(NovaTheme.dim)
             }
             Spacer()
-            Text("Nova \(version)")
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundColor(Color.white.opacity(0.8))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(NovaTheme.surface))
-                .overlay(Capsule().stroke(NovaTheme.stroke, lineWidth: 1))
             Button { dismiss() } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundColor(NovaTheme.dim)
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(NovaTheme.surface))
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(NovaTheme.surfaceHi))
                     .overlay(Circle().stroke(NovaTheme.stroke, lineWidth: 1))
             }
+            .buttonStyle(PressableStyle())
+            .accessibilityLabel("Cerrar")
         }
     }
 
-    private var hero: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Todo en orden.")
-                .font(.system(size: 34, weight: .bold))
-                .foregroundColor(.white)
-            Text("Consulta y personaliza tu experiencia en Nova.")
-                .font(.system(size: 14))
-                .foregroundColor(NovaTheme.dim)
-        }
-    }
+    // MARK: Grupos
 
-    private var summaryCards: some View {
-        HStack(spacing: 10) {
-            SummaryCard(symbol: "moon.stars.fill", tint: NovaTheme.accent,
-                        label: "APARIENCIA", value: "Oscura", caption: "Interfaz actual")
-            SummaryCard(symbol: "magnifyingglass", tint: NovaTheme.accent2,
-                        label: "BUSCADOR", value: engine.name, caption: "Motor activo")
-            SummaryCard(symbol: "checkmark", tint: NovaTheme.good,
-                        label: "INICIO", value: showShortcuts ? "Accesos" : "Limpio",
-                        caption: showShortcuts ? "Activados" : "Sin accesos")
-        }
-    }
-
-    private var searchSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionLabel("BUSCADOR PREDETERMINADO")
-            VStack(spacing: 0) {
-                ForEach(SearchEngine.allCases) { e in
-                    Button { engineRaw = e.rawValue } label: {
-                        HStack(spacing: 12) {
-                            EngineBadge(engine: e, size: 32)
-                            Text(e.name)
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.white)
-                            Spacer()
-                            if e == engine {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(NovaTheme.accent)
-                            }
+    private var searchGroup: some View {
+        SettingsGroup("Buscador", footer: "Se usa al escribir texto en la barra de direcciones.") {
+            ForEach(SearchEngine.allCases) { e in
+                Button {
+                    Haptics.select()
+                    engineRaw = e.rawValue
+                } label: {
+                    HStack(spacing: 12) {
+                        EngineBadge(engine: e, size: 34)
+                        Text(e.name)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white)
+                        Spacer()
+                        if e == engine {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(NovaTheme.accent)
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 11)
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    if e.id != SearchEngine.allCases.last?.id {
-                        Rectangle().fill(NovaTheme.stroke).frame(height: 1).padding(.leading, 58)
-                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                if e.id != SearchEngine.allCases.last?.id { RowDivider(inset: 60) }
             }
-            .novaCard()
         }
     }
 
-    private var homeSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionLabel("PANTALLA DE INICIO")
+    private var homeGroup: some View {
+        SettingsGroup("Inicio") {
             HStack(spacing: 12) {
-                IconTile(symbol: "square.grid.2x2", tint: NovaTheme.accent)
+                IconTile(symbol: "square.grid.2x2.fill", tint: NovaTheme.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Accesos rápidos")
                         .font(.system(size: 15, weight: .semibold))
@@ -153,16 +120,15 @@ struct SettingsView: View {
                     .tint(NovaTheme.accent)
             }
             .padding(14)
-            .novaCard()
         }
     }
 
-    private var privacySection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionLabel("PRIVACIDAD")
+    private var privacyGroup: some View {
+        SettingsGroup("Privacidad") {
             Button { confirmClear = true } label: {
                 HStack(spacing: 12) {
-                    IconTile(symbol: "trash", tint: Color(hex: 0xFF5C7A))
+                    IconTile(symbol: cleared ? "checkmark" : "trash.fill",
+                             tint: cleared ? NovaTheme.good : NovaTheme.danger)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Borrar datos de navegación")
                             .font(.system(size: 15, weight: .semibold))
@@ -174,28 +140,35 @@ struct SettingsView: View {
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(NovaTheme.dim)
+                        .foregroundColor(NovaTheme.faint)
                 }
                 .padding(14)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .novaCard()
         }
     }
 
-    private var footer: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "info.circle")
-                .font(.system(size: 14))
-                .foregroundColor(NovaTheme.accent)
-            Text("Los cambios guardados se conservan en este dispositivo.")
-                .font(.system(size: 12))
+    private var aboutGroup: some View {
+        SettingsGroup("Acerca de", footer: "Los cambios se guardan en este dispositivo.") {
+            infoRow(symbol: "moon.stars.fill", tint: NovaTheme.accent, title: "Apariencia", value: "Oscura")
+            RowDivider(inset: 60)
+            infoRow(symbol: "info.circle.fill", tint: NovaTheme.accent2, title: "Versión", value: version)
+        }
+    }
+
+    private func infoRow(symbol: String, tint: Color, title: String, value: String) -> some View {
+        HStack(spacing: 12) {
+            IconTile(symbol: symbol, tint: tint)
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.white)
+            Spacer()
+            Text(value)
+                .font(.system(size: 14, weight: .medium))
                 .foregroundColor(NovaTheme.dim)
         }
         .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .novaCard(radius: 14)
     }
 
     private func clearData() {
@@ -203,21 +176,50 @@ struct SettingsView: View {
             ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
             modifiedSince: Date(timeIntervalSince1970: 0)
         ) {
-            DispatchQueue.main.async { cleared = true }
+            DispatchQueue.main.async {
+                cleared = true
+                Haptics.success()
+            }
         }
     }
 }
 
 // MARK: - Componentes
 
-private struct SectionLabel: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+private struct SettingsGroup<Content: View>: View {
+    let title: String
+    let footer: String?
+    let content: Content
+
+    init(_ title: String, footer: String? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.footer = footer
+        self.content = content()
+    }
+
     var body: some View {
-        Text(text)
-            .font(.system(size: 10, weight: .medium, design: .monospaced))
-            .tracking(1.6)
-            .foregroundColor(NovaTheme.accent2.opacity(0.9))
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(1.0)
+                .foregroundColor(NovaTheme.dim)
+                .padding(.horizontal, 6)
+            VStack(spacing: 0) { content }
+                .novaCard(radius: 18)
+            if let footer = footer {
+                Text(footer)
+                    .font(.system(size: 12))
+                    .foregroundColor(NovaTheme.faint)
+                    .padding(.horizontal, 6)
+            }
+        }
+    }
+}
+
+private struct RowDivider: View {
+    var inset: CGFloat = 14
+    var body: some View {
+        Rectangle().fill(NovaTheme.stroke).frame(height: 1).padding(.leading, inset)
     }
 }
 
@@ -230,38 +232,5 @@ private struct IconTile: View {
             .foregroundColor(tint)
             .frame(width: 34, height: 34)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(tint.opacity(0.15)))
-    }
-}
-
-private struct SummaryCard: View {
-    let symbol: String
-    let tint: Color
-    let label: String
-    let value: String
-    let caption: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            IconTile(symbol: symbol, tint: tint)
-            Spacer(minLength: 14)
-            Text(label)
-                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                .tracking(1.2)
-                .foregroundColor(NovaTheme.dim)
-            Text(value)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundColor(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .padding(.top, 2)
-            Text(caption)
-                .font(.system(size: 10))
-                .foregroundColor(NovaTheme.dim)
-                .lineLimit(1)
-                .padding(.top, 1)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 118, alignment: .leading)
-        .novaCard()
     }
 }

@@ -289,6 +289,8 @@ final class BrowserModel: NSObject, ObservableObject {
 
     // Estado de navegación expuesto para las barras que ya utiliza Nova.
     @Published var addressText = ""
+    /// Texto que el usuario está escribiendo en la barra (no lo pisan las actualizaciones de carga).
+    @Published var omniText = ""
     @Published var host = ""
     @Published var currentURL: URL?
     @Published var canGoBack = false

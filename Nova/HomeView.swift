@@ -26,30 +26,25 @@ struct HomeTopBar: View {
     var openSettings: () -> Void
     var body: some View {
         HStack {
-            HStack(spacing: 8) {
+            HStack(spacing: 9) {
                 NovaMark(size: 30)
                 Text("Nova")
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.white)
             }
             Spacer()
-            Button(action: openSettings) {
-                HStack(spacing: 8) {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 26, height: 26)
-                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(NovaTheme.accentGradient))
-                    Text("Personalizar")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-                .padding(.leading, 6)
-                .padding(.trailing, 12)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(Color.black.opacity(0.35)))
-                .overlay(Capsule().stroke(NovaTheme.accent.opacity(0.55), lineWidth: 1))
+            Button {
+                Haptics.tap()
+                openSettings()
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.9))
+                    .frame(width: 40, height: 40)
+                    .novaGlass(radius: 14, shadow: false)
             }
+            .buttonStyle(PressableStyle())
+            .accessibilityLabel("Configuración")
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 8)
@@ -61,7 +56,7 @@ struct HomeTopBar: View {
 struct ClockView: View {
     private static let timeFmt: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss"
+        f.dateFormat = "HH:mm"
         return f
     }()
     private static let dateFmt: DateFormatter = {
@@ -72,18 +67,31 @@ struct ClockView: View {
     }()
 
     var body: some View {
-        TimelineView(.periodic(from: Date(), by: 1)) { ctx in
-            VStack(spacing: 6) {
+        TimelineView(.everyMinute) { ctx in
+            VStack(spacing: 8) {
+                Text(Self.greeting(for: ctx.date).uppercased())
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.6)
+                    .foregroundColor(NovaTheme.accent2.opacity(0.95))
                 Text(Self.timeFmt.string(from: ctx.date))
-                    .font(.system(size: 64, weight: .thin))
+                    .font(.system(size: 76, weight: .thin))
                     .monospacedDigit()
                     .foregroundColor(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                 Text(Self.capitalized(Self.dateFmt.string(from: ctx.date)))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color.white.opacity(0.85))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color.white.opacity(0.7))
             }
+        }
+    }
+
+    private static func greeting(for date: Date) -> String {
+        let hour = Calendar.current.component(.hour, from: date)
+        switch hour {
+        case 6..<13: return "Buenos días"
+        case 13..<20: return "Buenas tardes"
+        default: return "Buenas noches"
         }
     }
 
@@ -105,7 +113,7 @@ struct HomeView: View {
     private var engine: SearchEngine { SearchEngine(rawValue: engineRaw) ?? .google }
 
     var body: some View {
-        VStack(spacing: 30) {
+        VStack(spacing: 34) {
             Spacer()
             ClockView()
             searchPill
@@ -122,29 +130,39 @@ struct HomeView: View {
         HStack(spacing: 10) {
             Menu {
                 ForEach(SearchEngine.allCases) { e in
-                    Button(e.name) { engineRaw = e.rawValue }
+                    Button {
+                        engineRaw = e.rawValue
+                        Haptics.select()
+                    } label: {
+                        if e == engine {
+                            Label(e.name, systemImage: "checkmark")
+                        } else {
+                            Text(e.name)
+                        }
+                    }
                 }
             } label: {
                 HStack(spacing: 5) {
-                    EngineBadge(engine: engine, size: 30)
+                    EngineBadge(engine: engine, size: 32)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundColor(NovaTheme.dim)
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 5)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.07)))
+                .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(Color.white.opacity(0.07)))
             }
+            .accessibilityLabel("Buscador: \(engine.name)")
 
             TextField("", text: $query,
                       prompt: Text("Busca con \(engine.name) o escribe una dirección")
-                        .foregroundColor(Color.white.opacity(0.5)))
+                        .foregroundColor(Color.white.opacity(0.45)))
                 .focused($focused)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.webSearch)
                 .submitLabel(.go)
-                .font(.system(size: 14))
+                .font(.system(size: 15, weight: .medium))
                 .foregroundColor(.white)
                 .tint(NovaTheme.accent)
                 .onSubmit(go)
@@ -152,56 +170,76 @@ struct HomeView: View {
             Button(action: go) {
                 Image(systemName: "arrow.right")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(NovaTheme.accent)
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(NovaTheme.accent.opacity(0.18)))
+                    .foregroundColor(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(query.isEmpty ? AnyShapeStyle(Color.white.opacity(0.08))
+                                                            : AnyShapeStyle(NovaTheme.accentGradient)))
             }
+            .buttonStyle(PressableStyle())
+            .accessibilityLabel("Buscar")
         }
         .padding(.leading, 8)
-        .padding(.trailing, 10)
-        .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 19, style: .continuous).fill(NovaTheme.surface.opacity(0.94)))
-        .overlay(RoundedRectangle(cornerRadius: 19, style: .continuous)
-            .stroke(focused ? NovaTheme.accent.opacity(0.72) : NovaTheme.stroke, lineWidth: 1))
-        .shadow(color: Color.black.opacity(0.24), radius: 18, y: 8)
+        .padding(.trailing, 9)
+        .padding(.vertical, 9)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 22, style: .continuous).fill(NovaTheme.surface.opacity(0.82))
+            }
+        )
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .strokeBorder(focused ? NovaTheme.accent.opacity(0.8) : Color.white.opacity(0.11),
+                          lineWidth: focused ? 1.4 : 1))
+        .shadow(color: Color.black.opacity(0.30), radius: 18, y: 8)
         .animation(.easeOut(duration: 0.2), value: focused)
+        .animation(.easeOut(duration: 0.2), value: query.isEmpty)
     }
 
     private var shortcutGrid: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 18) {
-            ForEach(shortcuts) { s in
-                Button {
-                    focused = false
-                    model.load(s.url)
-                } label: {
-                    VStack(spacing: 7) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(Color.black.opacity(0.40))
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(NovaTheme.stroke, lineWidth: 1)
-                            if let symbol = s.symbol {
-                                Image(systemName: symbol)
-                                    .font(.system(size: 22, weight: .semibold))
-                                    .foregroundColor(s.color)
-                            } else if let glyph = s.glyph {
-                                Text(glyph)
-                                    .font(.system(size: 24, weight: .bold))
-                                    .foregroundColor(s.color)
+        VStack(alignment: .leading, spacing: 14) {
+            Text("ACCESOS RÁPIDOS")
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(1.4)
+                .foregroundColor(NovaTheme.faint)
+                .padding(.leading, 4)
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 20) {
+                ForEach(shortcuts) { s in
+                    Button {
+                        Haptics.tap()
+                        focused = false
+                        model.load(s.url)
+                    } label: {
+                        VStack(spacing: 8) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(LinearGradient(colors: [s.color.opacity(0.24), s.color.opacity(0.07)],
+                                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                                if let symbol = s.symbol {
+                                    Image(systemName: symbol)
+                                        .font(.system(size: 22, weight: .semibold))
+                                        .foregroundColor(s.color)
+                                } else if let glyph = s.glyph {
+                                    Text(glyph)
+                                        .font(.system(size: 24, weight: .bold))
+                                        .foregroundColor(s.color)
+                                }
                             }
+                            .frame(width: 60, height: 60)
+                            Text(s.name)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(Color.white.opacity(0.72))
+                                .lineLimit(1)
                         }
-                        .frame(width: 56, height: 56)
-                        Text(s.name)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(Color.white.opacity(0.7))
-                            .lineLimit(1)
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
+                    .buttonStyle(PressableStyle())
+                    .accessibilityLabel(s.name)
                 }
-                .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 4)
     }
 
     private func go() {
