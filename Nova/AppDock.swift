@@ -128,13 +128,13 @@ struct DockItemView: View {
 
     @ViewBuilder private var icon: some View {
         if let img = tab.faviconImage {
-            Image(uiImage: img).resizable().scaledToFill().background(Color.white.opacity(0.06))
+            Image(uiImage: img).resizable().scaledToFill().background(NovaTheme.ink(0.06))
         } else {
             ZStack {
                 (info?.color ?? NovaTheme.surfaceHi)
                 Image(systemName: info?.glyph ?? "globe")
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(info == nil ? NovaTheme.dim : .white)
             }
         }
     }
@@ -180,9 +180,9 @@ struct AppDockView: View {
                     .overlay(Capsule().fill(NovaTheme.surface.opacity(0.78)))
             )
             .overlay(Capsule().strokeBorder(
-                LinearGradient(colors: [Color.white.opacity(0.16), Color.white.opacity(0.05)],
+                LinearGradient(colors: [NovaTheme.ink(0.16), NovaTheme.ink(0.05)],
                                startPoint: .top, endPoint: .bottom), lineWidth: 1))
-            .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
+            .shadow(color: NovaTheme.shadow(0.35), radius: 14, y: 6)
             .animation(.spring(response: 0.38, dampingFraction: 0.8), value: apps.map { $0.id })
             .padding(.bottom, 10)
         }

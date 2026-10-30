@@ -4,6 +4,7 @@ import PhotosUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("appearance") private var appearanceRaw = AppearanceMode.system.rawValue
     @AppStorage("engine") private var engineRaw = SearchEngine.google.rawValue
     @AppStorage("showShortcuts") private var showShortcuts = true
     @ObservedObject private var bg = HomeBackgroundStore.shared
@@ -27,13 +28,14 @@ struct SettingsView: View {
     var body: some View {
         ZStack {
             NovaTheme.bg.ignoresSafeArea()
-            RadialGradient(colors: [Color(hex: 0x4B2FB8, opacity: 0.30), .clear],
+            RadialGradient(colors: [Color.nova(light: Color(hex: 0x8D7CFF, opacity: 0.18), dark: Color(hex: 0x4B2FB8, opacity: 0.30)), .clear],
                            center: .topTrailing, startRadius: 0, endRadius: 420)
                 .ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 24) {
                     header
+                    appearanceGroup
                     searchGroup
                     homeGroup
                     backgroundGroup
@@ -47,7 +49,7 @@ struct SettingsView: View {
                 .padding(.bottom, 32)
             }
         }
-        .preferredColorScheme(.dark)
+        .novaAppearance()
         .onChange(of: pickedItem) { item in
             guard let item = item else { return }
             Task {
@@ -83,7 +85,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Configuración")
                     .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(NovaTheme.text)
                 Text("Nova \(version)")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(NovaTheme.dim)
@@ -104,6 +106,39 @@ struct SettingsView: View {
 
     // MARK: Grupos
 
+    private var appearanceGroup: some View {
+        SettingsGroup("Apariencia", footer: "«Sistema» sigue el modo claro u oscuro de tu iPhone.") {
+            HStack(spacing: 8) {
+                ForEach(AppearanceMode.allCases) { m in
+                    let selected = appearanceRaw == m.rawValue
+                    Button {
+                        Haptics.select()
+                        withAnimation(.easeInOut(duration: 0.25)) { appearanceRaw = m.rawValue }
+                    } label: {
+                        VStack(spacing: 6) {
+                            Image(systemName: m.symbol)
+                                .font(.system(size: 17, weight: .semibold))
+                            Text(m.title)
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundColor(selected ? .white : NovaTheme.dim)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 62)
+                        .background(
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .fill(selected ? AnyShapeStyle(NovaTheme.accentGradient)
+                                               : AnyShapeStyle(NovaTheme.ink(0.06)))
+                        )
+                    }
+                    .buttonStyle(PressableStyle())
+                    .accessibilityLabel("Tema \(m.title)")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+            .padding(10)
+        }
+    }
+
     private var searchGroup: some View {
         SettingsGroup("Buscador", footer: "Se usa al escribir texto en la barra de direcciones.") {
             ForEach(SearchEngine.allCases) { e in
@@ -115,7 +150,7 @@ struct SettingsView: View {
                         EngineBadge(engine: e, size: 34)
                         Text(e.name)
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(NovaTheme.text)
                         Spacer()
                         if e == engine {
                             Image(systemName: "checkmark")
@@ -140,7 +175,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Accesos rápidos")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(NovaTheme.text)
                     Text("Tus sitios favoritos bajo el buscador")
                         .font(.system(size: 12))
                         .foregroundColor(NovaTheme.dim)
@@ -241,7 +276,7 @@ struct SettingsView: View {
                 .frame(width: 20)
             Text(title)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white)
+                .foregroundColor(NovaTheme.text)
                 .frame(width: 84, alignment: .leading)
             Slider(value: value, in: range)
                 .tint(NovaTheme.accent)
@@ -313,7 +348,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Contraseñas guardadas")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(NovaTheme.text)
                         Text(vaultCount == 1 ? "1 cuenta" : "\(vaultCount) cuentas")
                             .font(.system(size: 12))
                             .foregroundColor(NovaTheme.dim)
@@ -337,7 +372,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(NovaTheme.text)
                 Text(detail)
                     .font(.system(size: 12))
                     .foregroundColor(NovaTheme.dim)
@@ -359,7 +394,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Borrar datos de navegación")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(NovaTheme.text)
                         Text(cleared ? "Datos eliminados" : "Cookies, caché y almacenamiento de sitios")
                             .font(.system(size: 12))
                             .foregroundColor(cleared ? NovaTheme.good : NovaTheme.dim)
@@ -389,7 +424,7 @@ struct SettingsView: View {
             IconTile(symbol: symbol, tint: tint)
             Text(title)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(.white)
+                .foregroundColor(NovaTheme.text)
             Spacer()
             Text(value)
                 .font(.system(size: 14, weight: .medium))

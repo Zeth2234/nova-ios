@@ -109,3 +109,12 @@ INICIO RAPIDO CON FACE ID
   de Apple que no se puede obtener con AltStore / Apple ID gratuito. Por eso Nova hace que los sitios no
   las ofrezcan y caigan a contraseña, que Nova rellena con Face ID. Si un sitio insiste, sale un aviso
   y siempre puedes usar "Abrir en Safari" desde el menu del icono del sitio.
+
+TEMA CLARO / OSCURO / SISTEMA
+=============================
+- Configuración > Apariencia: elige Sistema (sigue tu iPhone), Claro u Oscuro.
+- Todo se adapta: fondo, tarjetas, barra de direcciones, pestañas, ecualizador,
+  navegación privada (versión lavanda en claro), teclado y las propias webs
+  (las que soportan modo oscuro lo siguen).
+- Con foto de fondo en el inicio, el reloj y los textos sueltos siguen en blanco
+  para que se lean sobre la imagen.

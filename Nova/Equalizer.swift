@@ -263,13 +263,14 @@ struct VGainSlider: View {
                 let frac = (value - range.lowerBound) / (range.upperBound - range.lowerBound)
                 let y = h * (1 - frac)
                 ZStack(alignment: .top) {
-                    Capsule().fill(Color.white.opacity(0.07)).frame(width: 4).frame(maxWidth: .infinity)
+                    Capsule().fill(NovaTheme.ink(0.07)).frame(width: 4).frame(maxWidth: .infinity)
                     Capsule().fill(NovaTheme.accentGradient)
                         .frame(width: 4, height: abs(h / 2 - y))
                         .offset(y: min(y, h / 2))
                         .frame(maxWidth: .infinity)
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(Color(hex: 0xE9E6FF))
+                        .fill(Color.nova(light: Color.white, dark: Color(hex: 0xE9E6FF)))
+                        .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).stroke(NovaTheme.ink(0.14), lineWidth: 1))
                         .frame(width: 22, height: 13)
                         .shadow(color: NovaTheme.accent.opacity(0.5), radius: 4)
                         .offset(y: y - 6.5)
@@ -304,11 +305,11 @@ struct EQKnob: View {
         VStack(spacing: 5) {
             ZStack {
                 Circle().trim(from: 0, to: 0.75).rotation(.degrees(135))
-                    .stroke(Color.white.opacity(0.08), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .stroke(NovaTheme.ink(0.08), style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 Circle().trim(from: 0, to: 0.75 * frac).rotation(.degrees(135))
                     .stroke(NovaTheme.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 Circle().fill(NovaTheme.surfaceHi).padding(7)
-                Capsule().fill(Color.white).frame(width: 2.5, height: 9)
+                Capsule().fill(NovaTheme.text).frame(width: 2.5, height: 9)
                     .offset(y: -13).rotationEffect(.degrees(-135 + 270 * frac))
             }
             .frame(width: 50, height: 50)
@@ -319,7 +320,7 @@ struct EQKnob: View {
                 value = min(max((start ?? value) + Double(v.translation.width) / 140 * span, range.lowerBound), range.upperBound)
             }.onEnded { _ in start = nil })
             .onTapGesture(count: 2) { value = neutral }
-            Text(title).font(.system(size: 11, weight: .semibold)).foregroundColor(.white)
+            Text(title).font(.system(size: 11, weight: .semibold)).foregroundColor(NovaTheme.text)
             Text(display).font(.system(size: 10, weight: .medium)).foregroundColor(NovaTheme.dim)
         }
         .frame(maxWidth: .infinity)
@@ -354,7 +355,7 @@ struct EQSheet: View {
             .padding(16)
         }
         .background(NovaBackground().ignoresSafeArea())
-        .preferredColorScheme(.dark)
+        .novaAppearance()
         .onReceive(timer) { _ in eq.pollSpectrum() }
     }
 
@@ -365,7 +366,7 @@ struct EQSheet: View {
                 .frame(width: 44, height: 44)
                 .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(NovaTheme.surfaceHi))
             VStack(alignment: .leading, spacing: 4) {
-                Text("Ecualizador").font(.system(size: 17, weight: .bold)).foregroundColor(.white)
+                Text("Ecualizador").font(.system(size: 17, weight: .bold)).foregroundColor(NovaTheme.text)
                 HStack(spacing: 6) {
                     if live {
                         HStack(spacing: 4) {
@@ -408,7 +409,7 @@ struct EQSheet: View {
     private var graph: some View {
         Canvas { ctx, size in
             let w = size.width, h = size.height
-            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color.black.opacity(0.18)))
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color.nova(light: NovaTheme.ink(0.05), dark: Color.black.opacity(0.18))))
             let n = eq.spectrum.count
             if n > 0 {
                 let bw = w / CGFloat(n)
@@ -419,7 +420,7 @@ struct EQSheet: View {
                 }
             }
             var zero = Path(); zero.move(to: CGPoint(x: 0, y: h / 2)); zero.addLine(to: CGPoint(x: w, y: h / 2))
-            ctx.stroke(zero, with: .color(Color.white.opacity(0.12)), lineWidth: 1)
+            ctx.stroke(zero, with: .color(NovaTheme.ink(0.12)), lineWidth: 1)
             let lo = log10(10.0), hi = log10(20000.0)
             let pts: [CGPoint] = EQModel.freqs.enumerated().map { i, f in
                 CGPoint(x: CGFloat((log10(f) - lo) / (hi - lo)) * w,
@@ -448,7 +449,7 @@ struct EQSheet: View {
             Slider(value: Binding(get: { eq.s.preamp }, set: { var t = eq.s; t.preamp = ($0 * 10).rounded() / 10; eq.s = t }),
                    in: -12...12).tint(NovaTheme.accent)
             Text(String(format: "%+.1f dB", eq.s.preamp))
-                .font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundColor(.white)
+                .font(.system(size: 12, weight: .semibold, design: .rounded)).foregroundColor(NovaTheme.text)
                 .frame(width: 64, alignment: .trailing)
         }
     }
@@ -494,7 +495,7 @@ struct EQSheet: View {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: d.ok ? "checkmark.circle.fill" : "info.circle.fill")
                     .foregroundColor(d.ok ? NovaTheme.good : Color.orange)
-                Text(d.text).font(.system(size: 12.5)).foregroundColor(.white.opacity(0.9))
+                Text(d.text).font(.system(size: 12.5)).foregroundColor(NovaTheme.ink(0.9))
                     .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(Array(d.lines.enumerated()), id: \.offset) { _, line in
@@ -502,13 +503,13 @@ struct EQSheet: View {
             }
             Button { eq.playTestTone() } label: {
                 Label("Probar con tono (4 s)", systemImage: "speaker.wave.2.fill")
-                    .font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+                    .font(.system(size: 13, weight: .semibold)).foregroundColor(NovaTheme.text)
                     .frame(maxWidth: .infinity).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NovaTheme.surfaceHi))
             }.buttonStyle(.plain)
             Button(action: openTest) {
                 Label("Abrir audio de prueba (sin YouTube)", systemImage: "play.circle.fill")
-                    .font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+                    .font(.system(size: 13, weight: .semibold)).foregroundColor(NovaTheme.text)
                     .frame(maxWidth: .infinity).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NovaTheme.accent.opacity(0.35)))
             }.buttonStyle(.plain)
@@ -519,7 +520,7 @@ struct EQSheet: View {
             }.buttonStyle(.plain)
             Toggle(isOn: Binding(get: { eq.s.compat }, set: { var t = eq.s; t.compat = $0; eq.s = t })) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Modo compatible (experimental)").font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+                    Text("Modo compatible (experimental)").font(.system(size: 13, weight: .semibold)).foregroundColor(NovaTheme.text)
                     Text("Intenta que YouTube use un formato ecualizable. Aplica solo a pestañas nuevas.")
                         .font(.system(size: 10.5)).foregroundColor(NovaTheme.dim)
                 }
@@ -540,7 +541,7 @@ struct EQSheet: View {
     private func toggleCard(_ title: String, _ sub: String, _ b: Binding<Bool>) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+                Text(title).font(.system(size: 14, weight: .semibold)).foregroundColor(NovaTheme.text)
                 Text(sub).font(.system(size: 10.5)).foregroundColor(NovaTheme.dim)
             }
             Spacer(minLength: 4)

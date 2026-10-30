@@ -62,7 +62,7 @@ struct TabSwitcherView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .novaAppearance()
         .animation(.easeInOut(duration: 0.2), value: showPrivate)
         .confirmationDialog(showPrivate ? "¿Cerrar y borrar las pestañas privadas?" : "¿Cerrar todas las pestañas?",
                             isPresented: $confirmCloseAll, titleVisibility: .visible) {
@@ -84,7 +84,7 @@ struct TabSwitcherView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(showPrivate ? "Pestañas privadas" : "Pestañas")
                     .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(NovaTheme.text)
                 let count = visibleTabs.count
                 Text(count == 1 ? "1 abierta" : "\(count) abiertas")
                     .font(.system(size: 12, weight: .medium))
@@ -179,7 +179,7 @@ struct TabSwitcherView: View {
                 Text("\(title) · \(count)")
                     .font(.system(size: 13, weight: .semibold))
             }
-            .foregroundColor(selected ? .white : NovaTheme.dim)
+            .foregroundColor(selected ? NovaTheme.text : NovaTheme.dim)
             .frame(maxWidth: .infinity)
             .frame(height: 36)
             .background(Capsule().fill(selected ? tint.opacity(0.28) : Color.clear))
@@ -205,7 +205,7 @@ struct TabSwitcherView: View {
                     .background(Circle().fill(accent.opacity(0.14)))
                 Text(showPrivate ? "Nueva pestaña privada" : "Nueva pestaña")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.9))
+                    .foregroundColor(NovaTheme.ink(0.9))
             }
             .frame(maxWidth: .infinity, minHeight: 124)
             .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(NovaTheme.surface.opacity(0.5)))
@@ -232,7 +232,7 @@ private struct TabCard: View {
                 Spacer(minLength: 12)
                 Text(tab.isHome ? (tab.isPrivate ? "Nueva pestaña privada" : "Nueva pestaña") : tab.title)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(NovaTheme.text)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                 HStack(spacing: 5) {
@@ -263,7 +263,7 @@ private struct TabCard: View {
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(NovaTheme.dim)
                     .frame(width: 28, height: 28)
-                    .background(Circle().fill(Color.white.opacity(0.07)))
+                    .background(Circle().fill(NovaTheme.ink(0.07)))
                     .padding(9)
                     .contentShape(Rectangle())
             }
@@ -298,7 +298,7 @@ private struct TabFaviconView: View {
             } else {
                 Image(systemName: tab.isHome ? (tab.isPrivate ? "eye.slash.fill" : "house.fill") : "globe")
                     .font(.system(size: 17, weight: .medium))
-                    .foregroundColor(isActive ? accent : Color.white.opacity(0.78))
+                    .foregroundColor(isActive ? accent : NovaTheme.ink(0.78))
                     .frame(width: 42, height: 42)
             }
 

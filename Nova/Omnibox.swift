@@ -19,13 +19,13 @@ struct AddressField: UIViewRepresentable {
         tf.spellCheckingType = .no
         tf.keyboardType = .webSearch
         tf.returnKeyType = .go
-        tf.keyboardAppearance = .dark
-        tf.textColor = .white
-        tf.tintColor = UIColor(NovaTheme.accent)
+        tf.keyboardAppearance = .default
+        tf.textColor = NovaTheme.uiText
+        tf.tintColor = UIColor.nova(light: UIColor(hex: 0x6A55E6), dark: UIColor(hex: 0x8D7CFF))
         tf.font = UIFont.systemFont(ofSize: 16, weight: .medium)
         tf.attributedPlaceholder = NSAttributedString(
             string: placeholder,
-            attributes: [.foregroundColor: UIColor.white.withAlphaComponent(0.38)])
+            attributes: [.foregroundColor: NovaTheme.uiInk(0.38)])
         tf.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
         tf.setContentHuggingPriority(.defaultLow, for: .horizontal)
         tf.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -81,7 +81,7 @@ struct AddressSuggestions: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color.black.opacity(0.55)
+            Color.nova(light: Color.black.opacity(0.28), dark: Color.black.opacity(0.55))
                 .contentShape(Rectangle())
                 .onTapGesture { close() }
 
@@ -93,7 +93,7 @@ struct AddressSuggestions: View {
                 }
             }
             .novaCard(radius: 20)
-            .shadow(color: .black.opacity(0.4), radius: 20, y: 10)
+            .shadow(color: NovaTheme.shadow(0.4), radius: 20, y: 10)
             .padding(.horizontal, 12)
             .padding(.top, 2)
         }
@@ -166,7 +166,7 @@ struct AddressSuggestions: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(NovaTheme.text)
                     .lineLimit(1)
                 Text(subtitle)
                     .font(.system(size: 11, weight: .medium))

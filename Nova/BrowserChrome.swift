@@ -101,10 +101,10 @@ struct AddressBar: View {
         .overlay(
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .strokeBorder(isEditing ? (model.isPrivate ? PrivateTheme.accent : NovaTheme.accent).opacity(0.85)
-                                        : (model.isPrivate ? PrivateTheme.accent.opacity(0.38) : Color.white.opacity(0.11)),
+                                        : (model.isPrivate ? PrivateTheme.accent.opacity(0.38) : NovaTheme.ink(0.11)),
                               lineWidth: isEditing ? 1.4 : 1)
         )
-        .shadow(color: .black.opacity(0.30), radius: 14, y: 6)
+        .shadow(color: NovaTheme.shadow(0.30), radius: 14, y: 6)
     }
 
     // Estado normal: [icono del sitio] [dominio / estado] [recargar]
@@ -116,7 +116,7 @@ struct AddressBar: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(model.host.isEmpty ? "Buscar o escribir una dirección" : model.host)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(NovaTheme.text)
                         .lineLimit(1)
                     statusLine
                 }
@@ -220,7 +220,7 @@ struct AddressBar: View {
         } label: {
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.white.opacity(0.07))
+                    .fill(NovaTheme.ink(0.07))
                 if let img = model.activeTab.faviconImage {
                     Image(uiImage: img)
                         .resizable()
@@ -236,7 +236,7 @@ struct AddressBar: View {
             .frame(width: 42, height: 42)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1))
+                .stroke(NovaTheme.ink(0.08), lineWidth: 1))
         }
         .accessibilityLabel("Opciones del sitio")
     }
@@ -247,10 +247,10 @@ struct AddressBar: View {
             model.reloadOrStop()
         } label: {
             ZStack {
-                Circle().fill(Color.white.opacity(0.07))
+                Circle().fill(NovaTheme.ink(0.07))
                 if model.isLoading {
                     Circle()
-                        .stroke(Color.white.opacity(0.10), lineWidth: 2)
+                        .stroke(NovaTheme.ink(0.10), lineWidth: 2)
                         .padding(2)
                     Circle()
                         .trim(from: 0, to: CGFloat(min(max(model.progress, 0.04), 1)))
@@ -261,7 +261,7 @@ struct AddressBar: View {
                 }
                 Image(systemName: model.isLoading ? "xmark" : "arrow.clockwise")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.white.opacity(0.88))
+                    .foregroundColor(NovaTheme.ink(0.88))
             }
             .frame(width: 38, height: 38)
             .contentShape(Circle())
@@ -278,7 +278,7 @@ struct AddressBar: View {
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 20, weight: .medium))
-                .foregroundColor(.white)
+                .foregroundColor(NovaTheme.text)
                 .frame(width: 54, height: 54)
                 .novaGlass(radius: radius)
         }
@@ -362,11 +362,11 @@ struct BottomBar: View {
         } label: {
             Text("\(min(model.tabCount, 99))")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundColor(model.isPrivate ? PrivateTheme.accent : Color.white.opacity(0.92))
+                .foregroundColor(model.isPrivate ? PrivateTheme.accent : NovaTheme.ink(0.92))
                 .frame(width: 22, height: 22)
                 .overlay(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .stroke(model.isPrivate ? PrivateTheme.accent : Color.white.opacity(0.9), lineWidth: 1.7)
+                        .stroke(model.isPrivate ? PrivateTheme.accent : NovaTheme.ink(0.9), lineWidth: 1.7)
                 )
                 .frame(maxWidth: .infinity, minHeight: 46)
                 .contentShape(Rectangle())
@@ -416,7 +416,7 @@ private struct NavIcon: View {
         Image(systemName: symbol)
             .font(.system(size: 19, weight: .medium))
             .foregroundColor(active ? NovaTheme.accent
-                             : (enabled ? Color.white.opacity(0.92) : Color.white.opacity(0.26)))
+                             : (enabled ? NovaTheme.ink(0.92) : NovaTheme.ink(0.26)))
             .frame(maxWidth: .infinity, minHeight: 46)
             .background {
                 if active {

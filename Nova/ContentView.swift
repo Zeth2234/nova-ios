@@ -66,7 +66,7 @@ struct ContentView: View {
             if shieldVisible { PrivacyShield() }
         }
         .animation(.easeInOut(duration: 0.2), value: privacy.isLocked)
-        .preferredColorScheme(.dark)
+        .novaAppearance()
         .onChange(of: model.isHome) { _ in isEditingAddress = false }
         .onChange(of: scenePhase) { phase in
             switch phase {

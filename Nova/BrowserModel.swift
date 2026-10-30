@@ -62,8 +62,8 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
         webView = WKWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = true
         webView.isOpaque = false
-        webView.backgroundColor = UIColor(red: 0.025, green: 0.028, blue: 0.065, alpha: 1)
-        webView.scrollView.backgroundColor = UIColor(red: 0.025, green: 0.028, blue: 0.065, alpha: 1)
+        webView.backgroundColor = NovaTheme.uiBg
+        webView.scrollView.backgroundColor = NovaTheme.uiBg
 
         super.init()
         webView.navigationDelegate = self

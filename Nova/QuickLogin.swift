@@ -502,7 +502,7 @@ struct QuickLoginPill: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Iniciar sesión rápido")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(NovaTheme.text)
                 Text(subtitle)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(NovaTheme.dim)
@@ -535,7 +535,7 @@ struct SavePasswordCard: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("¿Guardar contraseña?")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(NovaTheme.text)
                         Text("\(p.username) · \(p.host)")
                             .font(.system(size: 12))
                             .foregroundColor(NovaTheme.dim)
@@ -556,7 +556,7 @@ struct SavePasswordCard: View {
                     Button { login.dismissSave() } label: {
                         Text("Ahora no")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.85))
+                            .foregroundColor(NovaTheme.ink(0.85))
                             .padding(.horizontal, 12)
                             .frame(height: 38)
                             .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(NovaTheme.surfaceHi))
@@ -569,7 +569,7 @@ struct SavePasswordCard: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.white.opacity(0.85))
+                            .foregroundColor(NovaTheme.ink(0.85))
                             .frame(width: 38, height: 38)
                             .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(NovaTheme.surfaceHi))
                     }
@@ -593,7 +593,7 @@ struct QuickToastView: View {
                     .foregroundColor(NovaTheme.accent2)
                 Text(text)
                     .font(.system(size: 12.5, weight: .medium))
-                    .foregroundColor(.white.opacity(0.92))
+                    .foregroundColor(NovaTheme.ink(0.92))
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
@@ -623,7 +623,7 @@ struct SavedLoginsView: View {
                             .foregroundColor(NovaTheme.faint)
                         Text("Aún no hay contraseñas guardadas")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(NovaTheme.text)
                         Text("Cuando inicies sesión en una web, Nova te preguntará si quieres guardarla.")
                             .font(.system(size: 12))
                             .foregroundColor(NovaTheme.dim)
@@ -644,7 +644,7 @@ struct SavedLoginsView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(l.host)
                                         .font(.system(size: 14, weight: .semibold))
-                                        .foregroundColor(.white)
+                                        .foregroundColor(NovaTheme.text)
                                     Text(l.username)
                                         .font(.system(size: 12))
                                         .foregroundColor(NovaTheme.dim)
@@ -669,14 +669,14 @@ struct SavedLoginsView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .novaAppearance()
     }
 
     private var header: some View {
         HStack {
             Text("Contraseñas guardadas")
                 .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.white)
+                .foregroundColor(NovaTheme.text)
             Spacer()
             Button { dismiss() } label: {
                 Image(systemName: "xmark")

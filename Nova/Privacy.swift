@@ -114,7 +114,7 @@ struct LockScreenView: View {
                 NovaMark(size: 66)
                 Text("Nova está bloqueado")
                     .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(NovaTheme.text)
                 Text("Usa \(PrivacyStore.biometryName) para continuar")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(NovaTheme.dim)
@@ -167,20 +167,31 @@ struct PrivacyShield: View {
 // MARK: - Tema de navegación privada
 
 enum PrivateTheme {
-    static let bg      = Color(hex: 0x0A0710)
-    static let surface = Color(hex: 0x15101F)
-    static let accent  = Color(hex: 0xB68CFF)
+    static let bg      = Color.nova(light: Color(hex: 0xF4EFFB), dark: Color(hex: 0x0A0710))
+    static let surface = Color.nova(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x15101F))
+    static let accent  = Color.nova(light: Color(hex: 0x7B4FE0), dark: Color(hex: 0xB68CFF))
 }
 
 struct PrivateBackground: View {
+    @Environment(\.colorScheme) private var scheme
+
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(hex: 0x170D2A), PrivateTheme.bg],
-                           startPoint: .top, endPoint: .bottom)
-            RadialGradient(colors: [Color(hex: 0x6B3FD1, opacity: 0.30), .clear],
-                           center: .topTrailing, startRadius: 0, endRadius: 480)
-            RadialGradient(colors: [Color(hex: 0x3A1D78, opacity: 0.28), .clear],
-                           center: .bottomLeading, startRadius: 0, endRadius: 520)
+            if scheme == .dark {
+                LinearGradient(colors: [Color(hex: 0x170D2A), Color(hex: 0x0A0710)],
+                               startPoint: .top, endPoint: .bottom)
+                RadialGradient(colors: [Color(hex: 0x6B3FD1, opacity: 0.30), .clear],
+                               center: .topTrailing, startRadius: 0, endRadius: 480)
+                RadialGradient(colors: [Color(hex: 0x3A1D78, opacity: 0.28), .clear],
+                               center: .bottomLeading, startRadius: 0, endRadius: 520)
+            } else {
+                LinearGradient(colors: [Color(hex: 0xF8F4FE), Color(hex: 0xEDE6F8)],
+                               startPoint: .top, endPoint: .bottom)
+                RadialGradient(colors: [Color(hex: 0xB68CFF, opacity: 0.30), .clear],
+                               center: .topTrailing, startRadius: 0, endRadius: 480)
+                RadialGradient(colors: [Color(hex: 0x8D6BE8, opacity: 0.18), .clear],
+                               center: .bottomLeading, startRadius: 0, endRadius: 520)
+            }
         }
     }
 }
@@ -198,7 +209,7 @@ struct PrivateTopBar: View {
                     .background(Circle().fill(PrivateTheme.accent.opacity(0.16)))
                 Text("Privada")
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(NovaTheme.text)
             }
             Spacer()
             Button {
@@ -207,7 +218,7 @@ struct PrivateTopBar: View {
             } label: {
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.9))
+                    .foregroundColor(NovaTheme.ink(0.9))
                     .frame(width: 40, height: 40)
                     .novaGlass(radius: 14, shadow: false)
             }
@@ -240,7 +251,7 @@ struct PrivateHomeView: View {
                 VStack(spacing: 8) {
                     Text("Navegación privada")
                         .font(.system(size: 26, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(NovaTheme.text)
                     Text("Estas pestañas no guardan historial, cookies, contraseñas ni datos de sitios. Todo se borra al cerrarlas.")
                         .font(.system(size: 14))
                         .foregroundColor(NovaTheme.dim)
@@ -271,7 +282,7 @@ struct PrivateHomeView: View {
                     } label: {
                         Text("Salir del modo privado")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(NovaTheme.text)
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
                             .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(NovaTheme.surfaceHi))
@@ -321,7 +332,7 @@ struct PrivateHomeView: View {
                 .keyboardType(.webSearch)
                 .submitLabel(.go)
                 .focused($focused)
-                .foregroundColor(.white)
+                .foregroundColor(NovaTheme.text)
                 .tint(PrivateTheme.accent)
                 .onSubmit {
                     let q = query
@@ -355,7 +366,7 @@ private struct PrivateFeatureRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(NovaTheme.text)
                 Text(detail)
                     .font(.system(size: 12))
                     .foregroundColor(NovaTheme.dim)
