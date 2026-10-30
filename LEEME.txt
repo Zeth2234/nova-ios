@@ -1,0 +1,15 @@
+NOVA iOS - PRUEBA MINIMA
+========================
+
+1. Crea una cuenta gratis en github.com
+2. Pulsa "New repository". Ponle un nombre (ej: nova-ios) y marca PUBLIC.
+3. Dentro del repositorio: "Add file" > "Upload files". Arrastra TODO el contenido
+   de esta carpeta (project.yml, carpeta Nova y carpeta .github). Pulsa "Commit changes".
+   - Si la carpeta .github no se sube (es oculta): "Add file" > "Create new file",
+     escribe de nombre  .github/workflows/build.yml  y pega dentro el contenido del archivo build.yml.
+4. Ve a la pestana "Actions". Elige "Build IPA" > "Run workflow". (Si ya se lanzo solo al subir, no hace falta.)
+5. Espera unos minutos hasta que salga un check verde.
+6. Entra en esa ejecucion y abajo, en "Artifacts", descarga "Nova-ipa" (es un zip con Nova.ipa dentro).
+7. Instala Nova.ipa en el iPhone con AltStore (o Sideloadly) con tu Apple ID.
+
+Si sale una X roja: abre la ejecucion, pulsa el paso que fallo y copia el error para mandarmelo.
