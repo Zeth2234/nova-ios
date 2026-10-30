@@ -103,6 +103,9 @@ final class EQModel: ObservableObject {
             return ("Lo que suena en esta página no se puede ecualizar en iOS (\(r)). El ecualizador funciona, pero ese audio no pasa por él. Usa «Probar con tono» para comprobarlo.", false, lines)
         }
         if ctx == "suspended" { return ("Motor en pausa: cierra el panel, toca la web una vez y vuelve a abrirlo.", false, lines) }
+        if (spectrum.max() ?? 0) < 0.02 {
+            return ("El audio figura como conectado, pero no llega nada al ecualizador mientras suena. iOS parece seguir reproduciéndolo por su ruta nativa (límite de WebKit con YouTube y similares). Sube a la gráfica: si las barras no se mueven, no se puede ecualizar.", false, lines)
+        }
         return ("Activo: el audio que suena está conectado al ecualizador.", true, lines)
     }
 
