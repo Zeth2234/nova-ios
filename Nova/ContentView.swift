@@ -1,59 +1,46 @@
 import SwiftUI
-import WebKit
-
-struct WebViewContainer: UIViewRepresentable {
-    let webView: WKWebView
-    func makeUIView(context: Context) -> WKWebView { webView }
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
-}
 
 struct ContentView: View {
     @StateObject private var model = BrowserModel()
-    @FocusState private var addressFocused: Bool
+    @State private var showSettings = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Barra de direcciones
-            HStack(spacing: 8) {
-                TextField("Buscar o escribir dirección", text: $model.addressText)
-                    .focused($addressFocused)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.webSearch)
-                    .submitLabel(.go)
-                    .onSubmit {
-                        model.load(model.addressText)
-                        addressFocused = false
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+        ZStack {
+            NovaBackground().ignoresSafeArea()
 
-                if model.isLoading {
-                    ProgressView()
+            VStack(spacing: 0) {
+                if model.isHome {
+                    HomeTopBar(openSettings: { showSettings = true })
+                } else {
+                    AddressBar(model: model)
+                        .background(NovaTheme.bg.ignoresSafeArea(edges: .top))
                 }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
 
-            // Página web
-            WebViewContainer(webView: model.webView)
+                ZStack {
+                    WebViewContainer(webView: model.webView)
+                        .opacity(model.isHome ? 0 : 1)
+                        .allowsHitTesting(!model.isHome)
+                    if model.isHome {
+                        HomeView(model: model)
+                    }
+                }
 
-            // Botones inferiores
-            HStack {
-                Button(action: model.goBack) { Image(systemName: "chevron.left") }
-                    .disabled(!model.canGoBack)
-                Spacer()
-                Button(action: model.goForward) { Image(systemName: "chevron.right") }
-                    .disabled(!model.canGoForward)
-                Spacer()
-                Button(action: model.reload) { Image(systemName: "arrow.clockwise") }
+                BottomBar(model: model, openSettings: { showSettings = true })
+                    .background(
+                        (model.isHome ? Color.clear : NovaTheme.bg)
+                            .ignoresSafeArea(edges: .bottom)
+                    )
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(NovaTheme.stroke)
+                            .frame(height: model.isHome ? 0 : 1)
+                    }
             }
-            .font(.title3)
-            .padding(.horizontal, 32)
-            .padding(.vertical, 10)
-            .background(Color(.systemBackground))
+        }
+        .preferredColorScheme(.dark)
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .presentationDragIndicator(.visible)
         }
     }
 }
