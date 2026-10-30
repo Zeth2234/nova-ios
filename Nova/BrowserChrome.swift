@@ -2,36 +2,44 @@ import SwiftUI
 import WebKit
 
 final class BrowserWebViewHost: UIView {
-    private weak var displayedWebView: WKWebView?
-
-    func display(_ webView: WKWebView) {
-        guard displayedWebView !== webView else { return }
-        displayedWebView?.removeFromSuperview()
-        displayedWebView = webView
-        webView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(webView)
-        NSLayoutConstraint.activate([
-            webView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            webView.topAnchor.constraint(equalTo: topAnchor),
-            webView.bottomAnchor.constraint(equalTo: bottomAnchor)
-        ])
+    /// Todas las pestañas permanecen dentro de la jerarquía (la activa visible, las demás
+    /// transparentes). Si un WKWebView sale de la ventana, iOS pausa su audio.
+    func display(_ webViews: [WKWebView], active: WKWebView) {
+        for old in subviews.compactMap({ $0 as? WKWebView }) where !webViews.contains(old) {
+            old.removeFromSuperview()
+        }
+        for web in webViews {
+            if web.superview !== self {
+                web.translatesAutoresizingMaskIntoConstraints = false
+                addSubview(web)
+                NSLayoutConstraint.activate([
+                    web.leadingAnchor.constraint(equalTo: leadingAnchor),
+                    web.trailingAnchor.constraint(equalTo: trailingAnchor),
+                    web.topAnchor.constraint(equalTo: topAnchor),
+                    web.bottomAnchor.constraint(equalTo: bottomAnchor)
+                ])
+            }
+            let isActive = web === active
+            web.alpha = isActive ? 1 : 0
+            web.isUserInteractionEnabled = isActive
+            if isActive { bringSubviewToFront(web) }
+        }
     }
 }
 
 struct WebViewContainer: UIViewRepresentable {
-    let webView: WKWebView
+    let webViews: [WKWebView]
+    let active: WKWebView
 
     func makeUIView(context: Context) -> BrowserWebViewHost {
         let host = BrowserWebViewHost()
         host.backgroundColor = .clear
-        host.display(webView)
+        host.display(webViews, active: active)
         return host
     }
 
     func updateUIView(_ uiView: BrowserWebViewHost, context: Context) {
-        // SwiftUI conserva el contenedor; sustituimos el WKWebView hijo al cambiar de pestaña.
-        uiView.display(webView)
+        uiView.display(webViews, active: active)
     }
 }
 

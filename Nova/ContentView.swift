@@ -18,7 +18,7 @@ struct ContentView: View {
                 }
 
                 ZStack(alignment: .top) {
-                    WebViewContainer(webView: model.webView)
+                    WebViewContainer(webViews: model.tabs.map { $0.webView }, active: model.webView)
                         .opacity(model.isHome ? 0 : 1)
                         .allowsHitTesting(!model.isHome)
 

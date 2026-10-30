@@ -30,6 +30,20 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
 
+        config.allowsPictureInPictureMediaPlayback = true
+        // Hace creer a la web que siempre está visible, para que YouTube/Spotify no se pausen solos.
+        let keepAlive = WKUserScript(source: """
+        (function() {
+            try {
+                Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
+                Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+                document.addEventListener('visibilitychange', e => e.stopImmediatePropagation(), true);
+                window.addEventListener('pagehide', e => e.stopImmediatePropagation(), true);
+            } catch (e) {}
+        })();
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        config.userContentController.addUserScript(keepAlive)
+
         webView = WKWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = true
         webView.isOpaque = false
