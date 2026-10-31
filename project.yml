@@ -9,6 +9,13 @@ targets:
     platform: iOS
     sources:
       - Nova
+    info:
+      path: NovaInfo.plist
+      properties:
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nova.browser
@@ -22,4 +29,6 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UIBackgroundModes: audio
         INFOPLIST_KEY_NSFaceIDUsageDescription: "Nova usa Face ID para proteger la navegación privada y tus contraseñas guardadas."
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Nova se conecta con Nova en tu PC por tu wifi para enviar pestañas y archivos."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Nova añade tus fotos a Archivos de Nova para enviarlas al PC."
         TARGETED_DEVICE_FAMILY: "1,2"
