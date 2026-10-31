@@ -65,6 +65,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
         config.userContentController.addUserScript(EQModel.shared.userScript) // ecualizador global
         config.userContentController.addUserScript(QuickLoginScripts.passkeyShim)
         if !isPrivate { config.userContentController.addUserScript(QuickLoginScripts.credentials) }
+        config.userContentController.addUserScript(NovaLinkScripts.filePicker) // v88 · archivos del PC para las webs
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.allowsBackForwardNavigationGestures = true
@@ -78,6 +79,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
 
         let controller = webView.configuration.userContentController
         controller.add(WeakScriptHandler(self), name: "novaPasskey")
+        controller.add(NovaFileBridge(webView: webView), name: "novaFile")
         if isPrivate {
             if Prefs.flag("blockTrackers") { TrackerBlocker.install(on: controller) }
         } else {
@@ -199,6 +201,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         refreshState()
         refreshFavicon()
+        webView.evaluateJavaScript("window.__novaLinked = \(NovaLinkFlags.linked ? "true" : "false");", completionHandler: nil)
     }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { refreshState() }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { refreshState() }
