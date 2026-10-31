@@ -354,28 +354,40 @@ struct NovaFilesView: View {
         .onChange(of: link.transfers.count) { _ in reload() }
     }
 
+    /// v89 · Toda la fila abre las acciones (antes solo el botón «…», y salían desactivadas sin explicar por qué).
     @ViewBuilder private func fileRow(_ it: LinkFileItem) -> some View {
         let url = LocalFiles.resolve(it.path)
-        HStack(spacing: 12) {
-            Image(systemName: icon(for: it.name)).foregroundColor(NovaTheme.accent).frame(width: 26)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(it.name).lineLimit(1)
-                Text(LocalFiles.size(it.size)).font(.system(size: 12)).foregroundColor(NovaTheme.dim)
+        Menu {
+            Section(link.connected == nil ? "Conecta con tu PC para enviar" : "Enviar a \(link.connected?.name ?? "tu PC")") {
+                Button { send(it, move: false) } label: { Label("Enviar al PC (copiar)", systemImage: "arrow.up.doc") }
+                Button { send(it, move: true) } label: { Label("Mover al PC", systemImage: "arrow.right.doc.on.clipboard") }
             }
-            Spacer()
-            Menu {
-                Button { Task { await link.sendToPC(it.path, move: false); reload() } } label: { Label("Enviar al PC (copiar)", systemImage: "arrow.up.doc") }
-                    .disabled(link.connected == nil)
-                Button { Task { await link.sendToPC(it.path, move: true); reload() } } label: { Label("Mover al PC", systemImage: "arrow.right.doc.on.clipboard") }
-                    .disabled(link.connected == nil)
-                if let url = url {
-                    ShareLink(item: url) { Label("Compartir", systemImage: "square.and.arrow.up") }
+            if let url = url {
+                ShareLink(item: url) { Label("Compartir", systemImage: "square.and.arrow.up") }
+            }
+            Button(role: .destructive) { confirmDelete = it } label: { Label("Eliminar", systemImage: "trash") }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon(for: it.name)).foregroundColor(NovaTheme.accent).frame(width: 26)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(it.name).lineLimit(1).foregroundColor(NovaTheme.text)
+                    Text(LocalFiles.size(it.size)).font(.system(size: 12)).foregroundColor(NovaTheme.dim)
                 }
-                Button(role: .destructive) { confirmDelete = it } label: { Label("Eliminar", systemImage: "trash") }
-            } label: {
-                Image(systemName: "ellipsis.circle").font(.system(size: 19)).foregroundColor(NovaTheme.dim)
+                Spacer()
+                Image(systemName: "paperplane").font(.system(size: 15)).foregroundColor(NovaTheme.accent)
             }
+            .contentShape(Rectangle())
         }
+    }
+
+    private func send(_ it: LinkFileItem, move: Bool) {
+        guard link.connected != nil else {
+            link.flash("Abre Nova en el PC (misma cuenta y wifi) y espera a que salga «Conectado».")
+            link.connectIfNeeded(force: true)
+            return
+        }
+        link.flash(move ? "Moviendo «\(it.name)» al PC…" : "Enviando «\(it.name)» al PC…")
+        Task { await link.sendToPC(it.path, move: move); reload() }
     }
 
     private func icon(for name: String) -> String {

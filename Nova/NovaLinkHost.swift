@@ -23,10 +23,17 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
     private var frames = 0
     private var closed = false
     private var observers: [NSKeyValueObservation] = []
+    /// v89 · "h264" = vídeo a 60 fps (por defecto) · "jpeg" = modo compatible (fotos).
+    private(set) var mode = "h264"
+    private(set) var outW = 1920
+    private(set) var outH = 1200
+    private var encoder: H264Encoder?
+    private var displayLink: CADisplayLink?
+    private var pendingSends = 0
 
     static let desktopUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15"
 
-    init(rid: String, url: String) {
+    init(rid: String, url: String, mode: String = "h264", width: Int = 1920) {
         id = rid
         let config = WKWebViewConfiguration()
         config.defaultWebpagePreferences.preferredContentMode = .desktop
@@ -47,6 +54,9 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         webView.isUserInteractionEnabled = false
         super.init()
         urlText = url
+        self.mode = mode == "jpeg" ? "jpeg" : "h264"
+        outW = max(960, min(2560, width)) & ~1
+        outH = (outW * 800 / 1280) & ~1
         UIDevice.current.isBatteryMonitoringEnabled = true
         observers.append(webView.observe(\.title, options: [.new]) { wv, _ in
             let t = wv.title ?? ""
@@ -58,21 +68,104 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         })
         attach()
         if let u = URL(string: url) { webView.load(URLRequest(url: u)) }
-        frameTimer = Timer.scheduledTimer(withTimeInterval: 0.14, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.captureFrame() }
-        }
+        startCapture()
         statsTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sendStats() }
         }
     }
 
     /// Se coloca detrás de toda la interfaz de Nova: se dibuja, pero no se ve.
+    /// Se encoge (solo en pantalla) para quedar entera dentro de la ventana: así WebKit pinta la página
+    /// completa a 1280 × 800 y no solo el trozo que cabría en la pantalla del iPhone.
     private func attach() {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let windows = scenes.flatMap { $0.windows }
         if let win = windows.first(where: { $0.isKeyWindow }) ?? windows.first {
+            let k = min(1, min(win.bounds.width / 1280, win.bounds.height / 800))
+            webView.bounds = CGRect(x: 0, y: 0, width: 1280, height: 800)
+            webView.center = CGPoint(x: 640 * k, y: 400 * k)
+            webView.transform = CGAffineTransform(scaleX: k, y: k)
             win.insertSubview(webView, at: 0)
         }
+    }
+
+    // MARK: Captura (v89)
+
+    private func startCapture() {
+        stopCapture()
+        if mode == "h264", let enc = H264Encoder(width: outW, height: outH, fps: 60, bitrate: outW >= 1900 ? 14_000_000 : 9_000_000) {
+            let rid = id, ew = enc.width, eh = enc.height
+            // @Sendable: VideoToolbox los llama desde su propio hilo.
+            enc.onConfig = { @Sendable avcc in
+                Task { @MainActor in NovaLink.shared.sendVideoConfig(rid: rid, width: ew, height: eh, avcc: avcc) }
+            }
+            enc.onFrame = { @Sendable [weak self] data, key in
+                Task { @MainActor in
+                    guard let self = self, !self.closed else { return }
+                    self.pendingSends += 1
+                    NovaLink.shared.sendVideoFrame(rid: rid, key: key, data: data) { [weak self] in
+                        Task { @MainActor in if let self = self { self.pendingSends = max(0, self.pendingSends - 1) } }
+                    }
+                }
+            }
+            encoder = enc
+            let link = CADisplayLink(target: DisplayLinkProxy { [weak self] in self?.videoTick() }, selector: #selector(DisplayLinkProxy.fire))
+            if #available(iOS 15.0, *) {
+                link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+            } else {
+                link.preferredFramesPerSecond = 60
+            }
+            link.add(to: .main, forMode: .common)
+            displayLink = link
+        } else {
+            mode = "jpeg"
+            frameTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.captureFrame() }
+            }
+        }
+    }
+
+    private func stopCapture() {
+        displayLink?.invalidate(); displayLink = nil
+        frameTimer?.invalidate(); frameTimer = nil
+        encoder?.invalidate(); encoder = nil
+        pendingSends = 0
+        inFlight = false
+    }
+
+    /// Cambia de modo o de resolución (lo pide el PC).
+    func setMode(_ m: String, width: Int) {
+        guard !closed else { return }
+        mode = m == "jpeg" ? "jpeg" : "h264"
+        outW = max(960, min(2560, width)) & ~1
+        outH = (outW * 800 / 1280) & ~1
+        startCapture()
+    }
+
+    func requestKeyFrame() { encoder?.forceKey = true }
+
+    /// Un fotograma de vídeo: dibuja la página en un búfer del codificador (sin copias extra).
+    private func videoTick() {
+        guard !closed, let enc = encoder, webView.superview != nil else { return }
+        // Si la wifi va justa, se salta el fotograma en vez de acumular retraso.
+        if pendingSends > 3 { return }
+        guard let pb = enc.makeBuffer() else { return }
+        CVPixelBufferLockBaseAddress(pb, [])
+        let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb)
+        if let ctx = CGContext(data: CVPixelBufferGetBaseAddress(pb), width: w, height: h, bitsPerComponent: 8,
+                               bytesPerRow: CVPixelBufferGetBytesPerRow(pb), space: CGColorSpaceCreateDeviceRGB(),
+                               bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
+            ctx.setFillColor(UIColor.white.cgColor)
+            ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+            ctx.translateBy(x: 0, y: CGFloat(h))
+            ctx.scaleBy(x: CGFloat(w) / 1280, y: -CGFloat(h) / 800)
+            UIGraphicsPushContext(ctx)
+            webView.drawHierarchy(in: CGRect(x: 0, y: 0, width: 1280, height: 800), afterScreenUpdates: false)
+            UIGraphicsPopContext()
+        }
+        CVPixelBufferUnlockBaseAddress(pb, [])
+        enc.encode(pb)
+        frames += 1
     }
 
     private func captureFrame() {
@@ -82,9 +175,9 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         sentAt = Date()
         let cfg = WKSnapshotConfiguration()
         cfg.rect = CGRect(x: 0, y: 0, width: 1280, height: 800)
-        cfg.snapshotWidth = NSNumber(value: Double(1280) / Double(max(1, UIScreen.main.scale)))
+        cfg.snapshotWidth = NSNumber(value: Double(outW) / Double(max(1, UIScreen.main.scale)))
         webView.takeSnapshot(with: cfg) { [weak self] image, _ in
-            let jpeg = image?.jpegData(compressionQuality: 0.55)
+            let jpeg = image?.jpegData(compressionQuality: 0.8)
             Task { @MainActor in
                 guard let self = self, !self.closed else { return }
                 guard let jpeg = jpeg else { self.inFlight = false; return }
@@ -112,7 +205,8 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         @unknown default: thermal = "—"
         }
         let stats: [String: Any] = ["memMB": RemoteTabHost.appMemoryMB(), "battery": level < 0 ? -1 : Int(level * 100),
-                                    "charging": charging, "fps": fps, "thermal": thermal]
+                                    "charging": charging, "fps": fps, "thermal": thermal,
+                                    "mode": mode, "width": outW, "height": outH]
         NovaLink.shared.send(["t": "rtab:stats", "rid": id, "title": webView.title ?? "", "url": webView.url?.absoluteString ?? urlText,
                               "canBack": webView.canGoBack, "canForward": webView.canGoForward, "stats": stats])
     }
@@ -208,7 +302,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
     func shutdown(notify: Bool) {
         guard !closed else { return }
         closed = true
-        frameTimer?.invalidate(); frameTimer = nil
+        stopCapture()
         statsTimer?.invalidate(); statsTimer = nil
         observers.removeAll()
         webView.stopLoading()
