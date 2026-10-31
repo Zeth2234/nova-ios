@@ -244,13 +244,17 @@ struct AppSidePanel: View {
     private var footer: some View {
         Group {
             if expanded {
-                HStack(spacing: 8) {
-                    footerButton("plus", title: "Añadir") { showManager = true }
-                    footerButton("slider.horizontal.3", title: "Personalizar") { showManager = true }
+                VStack(spacing: 8) {
+                    footerButton("laptopcomputer.and.iphone", title: "Dispositivos") { store.setOpen(false); NovaLink.shared.showDevices = true }
+                    HStack(spacing: 8) {
+                        footerButton("plus", title: "Añadir") { showManager = true }
+                        footerButton("slider.horizontal.3", title: "Personalizar") { showManager = true }
+                    }
                 }
                 .padding(.horizontal, 12)
             } else {
                 VStack(spacing: 8) {
+                    circleButton("laptopcomputer.and.iphone", label: "Dispositivos") { store.setOpen(false); NovaLink.shared.showDevices = true }
                     circleButton("plus", label: "Añadir apps") { showManager = true }
                     circleButton("slider.horizontal.3", label: "Personalizar panel") { showManager = true }
                 }
