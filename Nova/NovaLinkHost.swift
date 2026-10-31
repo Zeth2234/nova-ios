@@ -30,6 +30,9 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
     private var encoder: H264Encoder?
     private var displayLink: CADisplayLink?
     private var pendingSends = 0
+    private var drawMs: Double = 0
+    private var halfRate = false
+    private var skip = false
 
     static let desktopUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15"
 
@@ -57,6 +60,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         self.mode = mode == "jpeg" ? "jpeg" : "h264"
         outW = max(960, min(2560, width)) & ~1
         outH = (outW * 800 / 1280) & ~1
+        applyGeometry()
         UIDevice.current.isBatteryMonitoringEnabled = true
         observers.append(webView.observe(\.title, options: [.new]) { wv, _ in
             let t = wv.title ?? ""
@@ -81,19 +85,37 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let windows = scenes.flatMap { $0.windows }
         if let win = windows.first(where: { $0.isKeyWindow }) ?? windows.first {
-            let k = min(1, min(win.bounds.width / 1280, win.bounds.height / 800))
-            webView.bounds = CGRect(x: 0, y: 0, width: 1280, height: 800)
-            webView.center = CGPoint(x: 640 * k, y: 400 * k)
-            webView.transform = CGAffineTransform(scaleX: k, y: k)
             win.insertSubview(webView, at: 0)
+            placeInWindow()
         }
+    }
+
+    /// v90 · Rendimiento: antes la página se pintaba a 1280 × 800 puntos × 3 (3840 × 2400 píxeles) y luego se
+    /// reducía: el iPhone iba a tope. Ahora la vista mide exactamente la resolución de salida en píxeles y
+    /// pageZoom hace que la web siga viendo 1280 × 800 (vista de ordenador). Se pinta solo lo que se envía.
+    private func applyGeometry() {
+        let scale = max(1, UIScreen.main.scale)
+        let pw = (CGFloat(outW) / scale).rounded()
+        let ph = (pw * 800 / 1280).rounded()
+        webView.transform = .identity
+        webView.bounds = CGRect(x: 0, y: 0, width: pw, height: ph)
+        webView.pageZoom = pw / 1280
+        placeInWindow()
+    }
+
+    private func placeInWindow() {
+        guard let win = webView.window else { return }
+        let b = webView.bounds
+        let k = min(1, min(win.bounds.width / b.width, win.bounds.height / b.height))
+        webView.transform = CGAffineTransform(scaleX: k, y: k)
+        webView.center = CGPoint(x: b.width * k / 2, y: b.height * k / 2)
     }
 
     // MARK: Captura (v89)
 
     private func startCapture() {
         stopCapture()
-        if mode == "h264", let enc = H264Encoder(width: outW, height: outH, fps: 60, bitrate: outW >= 1900 ? 14_000_000 : 9_000_000) {
+        if mode == "h264", let enc = H264Encoder(width: outW, height: outH, fps: 60, bitrate: outW >= 2400 ? 10_000_000 : (outW >= 1900 ? 7_000_000 : 4_000_000)) {
             let rid = id, ew = enc.width, eh = enc.height
             // @Sendable: VideoToolbox los llama desde su propio hilo.
             enc.onConfig = { @Sendable avcc in
@@ -139,6 +161,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         mode = m == "jpeg" ? "jpeg" : "h264"
         outW = max(960, min(2560, width)) & ~1
         outH = (outW * 800 / 1280) & ~1
+        applyGeometry()
         startCapture()
     }
 
@@ -148,7 +171,16 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
     private func videoTick() {
         guard !closed, let enc = encoder, webView.superview != nil else { return }
         // Si la wifi va justa, se salta el fotograma en vez de acumular retraso.
-        if pendingSends > 3 { return }
+        if pendingSends > 2 { return }
+        // Ritmo adaptativo: si pintar cuesta mucho al iPhone, baja a 30 fps para no congelar Nova.
+        skip.toggle()
+        if halfRate && skip { return }
+        let t0 = CACurrentMediaTime()
+        defer {
+            let ms = (CACurrentMediaTime() - t0) * 1000
+            drawMs = drawMs * 0.9 + ms * 0.1
+            if drawMs > 11 { halfRate = true } else if drawMs < 6 { halfRate = false }
+        }
         guard let pb = enc.makeBuffer() else { return }
         CVPixelBufferLockBaseAddress(pb, [])
         let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb)
@@ -158,9 +190,11 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
             ctx.setFillColor(UIColor.white.cgColor)
             ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
             ctx.translateBy(x: 0, y: CGFloat(h))
-            ctx.scaleBy(x: CGFloat(w) / 1280, y: -CGFloat(h) / 800)
+            let b = webView.bounds
+            ctx.scaleBy(x: CGFloat(w) / b.width, y: -CGFloat(h) / b.height)
+            ctx.interpolationQuality = .low
             UIGraphicsPushContext(ctx)
-            webView.drawHierarchy(in: CGRect(x: 0, y: 0, width: 1280, height: 800), afterScreenUpdates: false)
+            webView.drawHierarchy(in: b, afterScreenUpdates: false)
             UIGraphicsPopContext()
         }
         CVPixelBufferUnlockBaseAddress(pb, [])
@@ -174,7 +208,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         inFlight = true
         sentAt = Date()
         let cfg = WKSnapshotConfiguration()
-        cfg.rect = CGRect(x: 0, y: 0, width: 1280, height: 800)
+        cfg.rect = webView.bounds
         cfg.snapshotWidth = NSNumber(value: Double(outW) / Double(max(1, UIScreen.main.scale)))
         webView.takeSnapshot(with: cfg) { [weak self] image, _ in
             let jpeg = image?.jpegData(compressionQuality: 0.8)
@@ -229,7 +263,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         switch m["kind"].str {
         case "click":
             run("""
-            (function(x,y){var e=document.elementFromPoint(x,y);if(!e)return;
+            (function(x,y){x=x*innerWidth/1280;y=y*innerHeight/800;var e=document.elementFromPoint(x,y);if(!e)return;
               var o={bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,view:window,button:0,pointerId:1,isPrimary:true};
               try{e.dispatchEvent(new PointerEvent('pointerdown',o));}catch(_){}
               e.dispatchEvent(new MouseEvent('mousedown',o));
@@ -242,7 +276,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         case "scroll":
             let dx = m["dx"].double ?? 0, dy = m["dy"].double ?? 0
             run("""
-            (function(x,y,dx,dy){var e=document.elementFromPoint(x,y);
+            (function(x,y,dx,dy){x=x*innerWidth/1280;y=y*innerHeight/800;var e=document.elementFromPoint(x,y);
               while(e&&e!==document.body&&e!==document.documentElement){var s=getComputedStyle(e);
                 if((/(auto|scroll)/.test(s.overflowY)&&e.scrollHeight>e.clientHeight)||(/(auto|scroll)/.test(s.overflowX)&&e.scrollWidth>e.clientWidth)){e.scrollBy(dx,dy);return;}
                 e=e.parentElement;}
