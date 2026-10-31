@@ -332,6 +332,7 @@ struct BottomBar: View {
     var openTabs: () -> Void
     var openEQ: () -> Void = {}
     var eqOn = false
+    var openPanel: () -> Void = {}
     var newPrivateTab: () -> Void = {}
 
     var body: some View {
@@ -386,6 +387,11 @@ struct BottomBar: View {
                     Haptics.success()
                 } label: {
                     Label("Copiar enlace", systemImage: "link")
+                }
+            }
+            if !model.isPrivate {
+                Button(action: openPanel) {
+                    Label("Panel de apps", systemImage: "sidebar.left")
                 }
             }
             if model.isPrivate {

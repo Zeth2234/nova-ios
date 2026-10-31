@@ -28,6 +28,13 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable, WKNavigationDe
     @Published var isPlayingAudio = false
     /// Versión de ordenador: user agent de Safari de Mac + modo de contenido de escritorio.
     @Published var desktopMode = false
+    /// Panel de apps: app del panel que abrió esta pestaña, reproductor, no leídos y silencio.
+    @Published var panelAppID: String?
+    @Published var nowPlaying: NowPlaying?
+    @Published var unreadCount = 0
+    @Published var isMuted = false
+    /// Última vez que se usó (para suspender la app más antigua si hay más de 4).
+    var lastUsed = Date()
 
     var onStateChange: (() -> Void)?
     private var observers: [NSKeyValueObservation] = []
@@ -379,7 +386,9 @@ final class BrowserModel: NSObject, ObservableObject {
     }
 
     func selectTab(_ id: UUID) {
-        guard tabs.contains(where: { $0.id == id }) else { return }
+        guard let target = tabs.first(where: { $0.id == id }) else { return }
+        if !tabs.isEmpty { activeTab.lastUsed = Date() }
+        target.lastUsed = Date()
         activeTabID = id
         refreshFromActiveTab()
     }

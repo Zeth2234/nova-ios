@@ -20,6 +20,8 @@ struct SettingsView: View {
     @AppStorage("quickAutoSubmit") private var quickAutoSubmit = true
     @AppStorage("blockTrackers") private var blockTrackers = true
     @State private var showVault = false
+    @State private var showPanel = false
+    @ObservedObject private var panelStore = PanelStore.shared
     @State private var vaultCount = Vault.all.count
 
     private var engine: SearchEngine { SearchEngine(rawValue: engineRaw) ?? .google }
@@ -40,6 +42,7 @@ struct SettingsView: View {
                     appearanceGroup
                     searchGroup
                     homeGroup
+                    panelGroup
                     backgroundGroup
                     securityGroup
                     quickLoginGroup
@@ -86,6 +89,10 @@ struct SettingsView: View {
                                      editingDraft = nil
                                  },
                                  onCancel: { editingDraft = nil })
+        }
+        .sheet(isPresented: $showPanel) {
+            PanelManagerView()
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showVault, onDismiss: { vaultCount = Vault.all.count }) {
             SavedLoginsView()
@@ -209,6 +216,31 @@ struct SettingsView: View {
                     .tint(NovaTheme.accent)
             }
             .padding(14)
+        }
+    }
+
+    private var panelGroup: some View {
+        SettingsGroup("Panel de apps", footer: "Apps ancladas, reproductor, contadores de no leídos y hasta \(PanelStore.maxRunning) apps abiertas a la vez.") {
+            Button { showPanel = true } label: {
+                HStack(spacing: 12) {
+                    IconTile(symbol: "sidebar.left", tint: NovaTheme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Personalizar panel")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(NovaTheme.text)
+                        Text(panelStore.pinned.count == 1 ? "1 app anclada" : "\(panelStore.pinned.count) apps ancladas")
+                            .font(.system(size: 12))
+                            .foregroundColor(NovaTheme.dim)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(NovaTheme.faint)
+                }
+                .padding(14)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
     }
 

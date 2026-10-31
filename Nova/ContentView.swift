@@ -6,6 +6,7 @@ struct ContentView: View {
     @ObservedObject private var privacy = PrivacyStore.shared
     @ObservedObject private var eq = EQModel.shared
     @ObservedObject private var login = QuickLogin.shared
+    @ObservedObject private var panel = PanelStore.shared
     @State private var showSettings = false
     @State private var showTabs = false
     @State private var showEQ = false
@@ -46,6 +47,7 @@ struct ContentView: View {
                               openTabs: { showTabs = true },
                               openEQ: { showEQ = true },
                               eqOn: eq.s.enabled,
+                              openPanel: { panel.setOpen(true) },
                               newPrivateTab: {
                                   privacy.requestPrivateAccess { ok in
                                       if ok { model.createTab(private: true) }
@@ -56,7 +58,20 @@ struct ContentView: View {
                 }
             }
             .animation(.spring(response: 0.34, dampingFraction: 0.88), value: isEditingAddress)
+
+            // Panel de apps (lateral, por encima de todo).
+            if panel.isOpen {
+                Color.black.opacity(0.38)
+                    .ignoresSafeArea()
+                    .onTapGesture { panel.setOpen(false) }
+                    .transition(.opacity)
+                    .zIndex(5)
+                AppSidePanel(model: model)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+                    .zIndex(6)
+            }
         }
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: panel.isOpen)
         .overlay {
             if privacy.isLocked {
                 LockScreenView().transition(.opacity)
@@ -68,6 +83,7 @@ struct ContentView: View {
         .animation(.easeInOut(duration: 0.2), value: privacy.isLocked)
         .novaAppearance()
         .onChange(of: model.isHome) { _ in isEditingAddress = false }
+        .onChange(of: isEditingAddress) { editing in if editing { panel.setOpen(false) } }
         .onChange(of: scenePhase) { phase in
             switch phase {
             case .background:
@@ -161,7 +177,10 @@ struct ContentView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if !isEditingAddress { AppDockView(model: model) }
+            if !isEditingAddress { PanelBottomOverlay(model: model) }
+        }
+        .overlay(alignment: .leading) {
+            if !isEditingAddress { PanelEdgeHandle(model: model).offset(y: 40) }
         }
         .animation(.spring(response: 0.38, dampingFraction: 0.84), value: model.isHome)
     }

@@ -136,3 +136,27 @@ FONDO DE INICIO: FOTO, GIF Y VIDEO + EDITOR TIPO DISCORD
 CORRECCION: al volver a "Sistema" desde Claro/Oscuro, Configuración se quedaba en el
 tema anterior. Ahora el tema se aplica solo a nivel de ventana, así que "Sistema"
 vuelve a seguir el modo del iPhone al instante.
+
+PANEL DE APPS PROFESIONAL (sustituye al panel flotante de 4 apps)
+================================================================
+Archivos: Nova/AppDock.swift (lógica), Nova/AppPanelViews.swift (interfaz, NUEVO),
+Nova/AppPanelManager.swift (personalizar, NUEVO). Copia de lo anterior en _backup-panel-antes/
+(esa carpeta NO hace falta subirla a GitHub).
+- Panel lateral que sale desde la izquierda: asa en el borde (toca o desliza) o menú "..." > Panel de apps.
+- Dos modos: compacto (iconos) y ampliado (nombre, estado, reproductor). Desliza a la izquierda para cerrar.
+- Apps ancladas que se guardan: YouTube, Spotify, WhatsApp y Discord de serie. Catálogo con 16 apps
+  (YouTube Music, SoundCloud, Apple Music, Telegram, Instagram, TikTok, X, Reddit, Twitch, Netflix,
+  Gmail, ChatGPT…), "Añadir este sitio" con su icono real y cualquier dirección propia.
+- Reordenar (Ordenar > arrastrar), quitar, anclar desde una pestaña abierta.
+- Hasta 4 apps abiertas a la vez: la que lleva más tiempo sin usarse se suspende (nunca la que ves ni
+  la que suena) y avisa. Indicador de capacidad (4 puntos).
+- Reproductor integrado: portada, título y artista (Media Session), barra de progreso, anterior,
+  pausa/reanudar, siguiente y silenciar, con botones propios de Spotify, YouTube, YouTube Music y SoundCloud.
+- Mini reproductor flotante en cualquier pestaña (desliza abajo o X para ocultar esa canción).
+- Contadores de no leídos (WhatsApp, Discord, Telegram, Gmail…) en el panel y en el asa.
+- Marca de app abierta/en pantalla (como el Dock del Mac), ecualizador animado si suena.
+- Mantén pulsada una app: ir/abrir, pausar, siguiente, silenciar, recargar, versión ordenador/móvil,
+  anclar/quitar, cerrar.
+- Opciones (Configuración > Panel de apps): asa, panel ampliado, mini reproductor, contadores y
+  "Solo una app con sonido" (al sonar una, se pausan las demás).
+- Las pestañas privadas nunca aparecen en el panel.
