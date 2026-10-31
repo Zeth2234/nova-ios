@@ -115,6 +115,13 @@ struct ContentView: View {
         .overlay(alignment: .bottom) {
             if !link.showDevices { NovaLinkToast().padding(.bottom, 60) }
         }
+        // v90 · Mientras el PC usa el iPhone, solo se ve «Se está compartiendo».
+        .overlay {
+            if !link.remoteTabs.isEmpty {
+                NovaSharingCover().transition(.opacity).zIndex(50)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: link.remoteTabs.isEmpty)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: link.toast)
         // v88 · Dispositivos: emparejar con el PC, Puente móvil, Transferencias y archivos.
         .sheet(isPresented: $link.showDevices) {

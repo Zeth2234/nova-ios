@@ -85,14 +85,16 @@ enum LocalFiles {
         let clean = rel.split(separator: "/").map(String.init).filter { !$0.isEmpty && $0 != "." && $0 != ".." }
         var u = root
         for part in clean { u.appendPathComponent(part) }
-        let rp = root.standardizedFileURL.path
-        let up = u.standardizedFileURL.path
+        let rp = root.resolvingSymlinksInPath().standardizedFileURL.path
+        let up = u.resolvingSymlinksInPath().standardizedFileURL.path
         return (up == rp || up.hasPrefix(rp + "/")) ? u : nil
     }
 
     static func relative(_ url: URL) -> String {
-        let rp = root.standardizedFileURL.path
-        let up = url.standardizedFileURL.path
+        // v89 · iOS devuelve a veces /private/var/… y otras /var/…: se resuelven los enlaces antes de comparar.
+        // Antes los archivos de «Recibidos» salían con una ruta mala y no se podían enviar al PC.
+        let rp = root.resolvingSymlinksInPath().standardizedFileURL.path
+        let up = url.resolvingSymlinksInPath().standardizedFileURL.path
         guard up.hasPrefix(rp) else { return url.lastPathComponent }
         return String(up.dropFirst(rp.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
@@ -453,13 +455,17 @@ final class NovaLink: ObservableObject {
             transfers[id] = nil
             flash(m["error"].str.isEmpty ? "El PC rechazó el archivo." : m["error"].str)
         case "rtab:open":
-            openRemoteTab(rid: m["rid"].str, url: m["url"].str)
+            openRemoteTab(rid: m["rid"].str, url: m["url"].str, mode: m["mode"].str, width: m["ow"].int ?? 1920)
         case "rtab:input":
             remoteTabs.first(where: { $0.id == m["rid"].str })?.input(m)
         case "rtab:nav":
             remoteTabs.first(where: { $0.id == m["rid"].str })?.navigate(m["action"].str, url: m["url"].str)
         case "rtab:close":
             if let h = remoteTabs.first(where: { $0.id == m["rid"].str }) { h.shutdown(notify: false); remoteTabs.removeAll { $0 === h } }
+        case "rtab:mode":
+            remoteTabs.first(where: { $0.id == m["rid"].str })?.setMode(m["mode"].str, width: m["w"].int ?? 1920)
+        case "rtab:key":
+            remoteTabs.first(where: { $0.id == m["rid"].str })?.requestKeyFrame()
         case "rtab:ack":
             remoteTabs.first(where: { $0.id == m["rid"].str })?.frameAcked()
         default:
@@ -624,9 +630,9 @@ final class NovaLink: ObservableObject {
 
     // MARK: Pestañas del PC que se ejecutan aquí
 
-    private func openRemoteTab(rid: String, url: String) {
+    private func openRemoteTab(rid: String, url: String, mode: String, width: Int) {
         guard rid.count == 36, url.hasPrefix("http") else { return }
-        let h = RemoteTabHost(rid: rid, url: url)
+        let h = RemoteTabHost(rid: rid, url: url, mode: mode.isEmpty ? "jpeg" : mode, width: width)
         remoteTabs.append(h)
         flash("Ejecutando una pestaña del PC")
     }
@@ -634,6 +640,25 @@ final class NovaLink: ObservableObject {
     func stopRemoteTab(_ h: RemoteTabHost) {
         h.shutdown(notify: true)
         remoteTabs.removeAll { $0 === h }
+    }
+
+    /// v89 · Vídeo H.264: [4][rid][ancho 2][alto 2][avcC] y [3][rid][clave 1][datos AVCC].
+    func sendVideoConfig(rid: String, width: Int, height: Int, avcc: Data) {
+        guard let task = socket else { return }
+        var d = Data([4])
+        d.append(Data(rid.utf8))
+        d.append(contentsOf: [UInt8((width >> 8) & 0xFF), UInt8(width & 0xFF), UInt8((height >> 8) & 0xFF), UInt8(height & 0xFF)])
+        d.append(avcc)
+        task.send(.data(d)) { _ in }
+    }
+
+    func sendVideoFrame(rid: String, key: Bool, data: Data, done: @escaping @Sendable () -> Void) {
+        guard let task = socket else { done(); return }
+        var d = Data([3])
+        d.append(Data(rid.utf8))
+        d.append(key ? 1 : 0)
+        d.append(data)
+        task.send(.data(d)) { _ in done() }
     }
 
     func sendFrame(rid: String, jpeg: Data) async {

@@ -39,7 +39,27 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
     init(rid: String, url: String, mode: String = "h264", width: Int = 1920) {
         id = rid
         let config = WKWebViewConfiguration()
-        config.defaultWebpagePreferences.preferredContentMode = .desktop
+        // v90 · Vista de ordenador sin pintar de más: la vista mide 640 × 400 puntos (1920 × 1200 píxeles en
+        // el iPhone) y la web se maqueta a 1280 × 800 reducida a la mitad. Antes se pintaba a 3840 × 2400.
+        config.defaultWebpagePreferences.preferredContentMode = .mobile
+        config.userContentController.addUserScript(WKUserScript(source: """
+        (function(){
+          var C = 'width=1280, initial-scale=0.5, minimum-scale=0.5, maximum-scale=0.5, user-scalable=no';
+          function fix(){
+            try {
+              var ms = document.querySelectorAll('meta[name=viewport]');
+              for (var i = 1; i < ms.length; i++) ms[i].remove();
+              var m = ms[0];
+              if (!m) { m = document.createElement('meta'); m.name = 'viewport'; (document.head || document.documentElement).appendChild(m); }
+              if (m.content !== C) m.content = C;
+            } catch (e) {}
+          }
+          fix();
+          document.addEventListener('DOMContentLoaded', fix);
+          window.addEventListener('load', fix);
+          setTimeout(fix, 1500);
+        })();
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         // Sin ventanas nuevas: los enlaces que abrirían otra pestaña se abren en esta.
@@ -52,13 +72,15 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
           }, true);
         })();
         """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1280, height: 800), configuration: config)
+        webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 640, height: 400), configuration: config)
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.bouncesZoom = false
         webView.customUserAgent = RemoteTabHost.desktopUA
         webView.isUserInteractionEnabled = false
         super.init()
         urlText = url
         self.mode = mode == "jpeg" ? "jpeg" : "h264"
-        outW = max(960, min(2560, width)) & ~1
+        outW = max(960, min(1920, width)) & ~1
         outH = (outW * 800 / 1280) & ~1
         applyGeometry()
         UIDevice.current.isBatteryMonitoringEnabled = true
@@ -90,16 +112,10 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         }
     }
 
-    /// v90 · Rendimiento: antes la página se pintaba a 1280 × 800 puntos × 3 (3840 × 2400 píxeles) y luego se
-    /// reducía: el iPhone iba a tope. Ahora la vista mide exactamente la resolución de salida en píxeles y
-    /// pageZoom hace que la web siga viendo 1280 × 800 (vista de ordenador). Se pinta solo lo que se envía.
+    /// La vista siempre mide 640 × 400 puntos; la web cree que mide 1280 × 800 (meta viewport a 0,5).
     private func applyGeometry() {
-        let scale = max(1, UIScreen.main.scale)
-        let pw = (CGFloat(outW) / scale).rounded()
-        let ph = (pw * 800 / 1280).rounded()
         webView.transform = .identity
-        webView.bounds = CGRect(x: 0, y: 0, width: pw, height: ph)
-        webView.pageZoom = pw / 1280
+        webView.bounds = CGRect(x: 0, y: 0, width: 640, height: 400)
         placeInWindow()
     }
 
@@ -115,7 +131,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
 
     private func startCapture() {
         stopCapture()
-        if mode == "h264", let enc = H264Encoder(width: outW, height: outH, fps: 60, bitrate: outW >= 2400 ? 10_000_000 : (outW >= 1900 ? 7_000_000 : 4_000_000)) {
+        if mode == "h264", let enc = H264Encoder(width: outW, height: outH, fps: 60, bitrate: outW >= 1900 ? 8_000_000 : 4_500_000) {
             let rid = id, ew = enc.width, eh = enc.height
             // @Sendable: VideoToolbox los llama desde su propio hilo.
             enc.onConfig = { @Sendable avcc in
@@ -159,9 +175,8 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
     func setMode(_ m: String, width: Int) {
         guard !closed else { return }
         mode = m == "jpeg" ? "jpeg" : "h264"
-        outW = max(960, min(2560, width)) & ~1
+        outW = max(960, min(1920, width)) & ~1
         outH = (outW * 800 / 1280) & ~1
-        applyGeometry()
         startCapture()
     }
 
@@ -179,7 +194,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         defer {
             let ms = (CACurrentMediaTime() - t0) * 1000
             drawMs = drawMs * 0.9 + ms * 0.1
-            if drawMs > 11 { halfRate = true } else if drawMs < 6 { halfRate = false }
+            if drawMs > 15 { halfRate = true } else if drawMs < 10 { halfRate = false }
         }
         guard let pb = enc.makeBuffer() else { return }
         CVPixelBufferLockBaseAddress(pb, [])

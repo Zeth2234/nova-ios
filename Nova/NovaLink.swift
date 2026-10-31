@@ -2,6 +2,8 @@ import SwiftUI
 import WebKit
 import UIKit
 import UniformTypeIdentifiers
+import AVFoundation
+import PhotosUI
 
 // ════════════════════════════════════════════════════════════════════════════════════
 //  Enlace con Nova para Windows (v88): emparejar, Puente móvil, Transferencias,
@@ -158,7 +160,9 @@ final class NovaLink: ObservableObject {
     @Published private(set) var connecting = false
     @Published private(set) var pcTabs: [LinkTab] = []
     @Published private(set) var transfers: [String: LinkTransfer] = [:]
-    @Published private(set) var remoteTabs: [RemoteTabHost] = []
+    @Published private(set) var remoteTabs: [RemoteTabHost] = [] {
+        didSet { sharingChanged(was: !oldValue.isEmpty) }
+    }
     @Published private(set) var pcPremium = false
     @Published var showDevices = false
     @Published var toast: String?
@@ -634,7 +638,8 @@ final class NovaLink: ObservableObject {
         guard rid.count == 36, url.hasPrefix("http") else { return }
         let h = RemoteTabHost(rid: rid, url: url, mode: mode.isEmpty ? "jpeg" : mode, width: width)
         remoteTabs.append(h)
-        flash("Ejecutando una pestaña del PC")
+        showDevices = false
+        pcPick = nil
     }
 
     func stopRemoteTab(_ h: RemoteTabHost) {
@@ -659,6 +664,98 @@ final class NovaLink: ObservableObject {
         d.append(key ? 1 : 0)
         d.append(data)
         task.send(.data(d)) { _ in done() }
+    }
+
+    // MARK: Compartiendo (v90)
+
+    private var keepAlive: AVAudioPlayer?
+    private var savedBrightness: CGFloat?
+
+    /// Mientras el PC usa el iPhone: la pantalla no se apaga sola y un audio silencioso mantiene viva la
+    /// conexión si sales de Nova o bloqueas el iPhone (al volver, la imagen sigue al instante).
+    private func sharingChanged(was: Bool) {
+        let now = !remoteTabs.isEmpty
+        guard now != was else { return }
+        UIApplication.shared.isIdleTimerDisabled = now
+        if now { startKeepAlive() } else { stopKeepAlive(); setDimmed(false) }
+    }
+
+    private func startKeepAlive() {
+        guard keepAlive == nil else { return }
+        let rate = 8000, seconds = 2
+        let samples = rate * seconds
+        var wav = Data("RIFF".utf8)
+        func le32(_ v: Int) -> [UInt8] { [UInt8(v & 0xFF), UInt8((v >> 8) & 0xFF), UInt8((v >> 16) & 0xFF), UInt8((v >> 24) & 0xFF)] }
+        func le16(_ v: Int) -> [UInt8] { [UInt8(v & 0xFF), UInt8((v >> 8) & 0xFF)] }
+        wav.append(contentsOf: le32(36 + samples * 2))
+        wav.append(Data("WAVEfmt ".utf8))
+        wav.append(contentsOf: le32(16) + le16(1) + le16(1) + le32(rate) + le32(rate * 2) + le16(2) + le16(16))
+        wav.append(Data("data".utf8))
+        wav.append(contentsOf: le32(samples * 2))
+        wav.append(Data(count: samples * 2))
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+            let p = try AVAudioPlayer(data: wav)
+            p.numberOfLoops = -1
+            p.volume = 0
+            p.play()
+            keepAlive = p
+        } catch {}
+    }
+
+    private func stopKeepAlive() {
+        keepAlive?.stop()
+        keepAlive = nil
+    }
+
+    /// Pantalla negra mientras se comparte: casi no gasta batería (OLED) y Nova sigue trabajando.
+    @Published private(set) var dimmed = false
+    func setDimmed(_ on: Bool) {
+        guard on != dimmed else { return }
+        dimmed = on
+        if on { savedBrightness = UIScreen.main.brightness; UIScreen.main.brightness = 0.02 }
+        else if let b = savedBrightness { UIScreen.main.brightness = b; savedBrightness = nil }
+    }
+
+    func stopSharing() {
+        for h in remoteTabs { h.shutdown(notify: true) }
+        remoteTabs.removeAll()
+        flash("Has dejado de compartir")
+    }
+
+    // MARK: Enviar archivos de fuera de Nova (Archivos / Fotos) directamente al PC (v90)
+
+    func sendExternal(_ urls: [URL]) async {
+        guard socket != nil else { flash("Abre Nova en el PC (misma cuenta y wifi) y espera a «Conectado»."); connectIfNeeded(force: true); return }
+        var ok = 0, lastError = ""
+        for u in urls {
+            let scoped = u.startAccessingSecurityScopedResource()
+            let r = await streamFile(u, extra: ["purpose": "save"])
+            if scoped { u.stopAccessingSecurityScopedResource() }
+            if r.ok { ok += 1 } else { lastError = r.error }
+        }
+        if ok > 0 { Haptics.success() }
+        flash(ok == urls.count ? (ok == 1 ? "Enviado al PC (Descargas › Nova)" : "\(ok) archivos enviados al PC") : (lastError.isEmpty ? "Algún archivo no se envió." : lastError))
+    }
+
+    func sendPhotos(_ items: [PhotosPickerItem]) async {
+        guard socket != nil else { flash("Abre Nova en el PC (misma cuenta y wifi) y espera a «Conectado»."); connectIfNeeded(force: true); return }
+        flash("Preparando \(items.count == 1 ? "la foto" : "\(items.count) fotos")…")
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("nova-envio", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd HH.mm.ss"
+        var urls: [URL] = []
+        for (i, item) in items.enumerated() {
+            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+            let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
+            let u = LocalFiles.unique(in: dir, name: "Foto \(fmt.string(from: Date()))\(i > 0 ? " \(i + 1)" : "").\(ext)")
+            if (try? data.write(to: u)) != nil { urls.append(u) }
+        }
+        guard !urls.isEmpty else { flash("No se pudieron leer las fotos."); return }
+        await sendExternal(urls)
+        for u in urls { try? FileManager.default.removeItem(at: u) }
     }
 
     func sendFrame(rid: String, jpeg: Data) async {

@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import Photos
 import UniformTypeIdentifiers
 
 // ════════════════════════════════════════════════════════════════════════════════════
@@ -203,6 +204,7 @@ struct NovaDevicesView: View {
 
     private var filesCard: some View {
         DCard(title: "Transferencias", symbol: "arrow.left.arrow.right", hint: "Copia o mueve archivos entre el iPhone y el PC. Máximo \(link.limitText) por archivo.") {
+            SendToPCButtons()
             NavigationLink { NovaFilesView(rel: "", title: "Archivos de Nova") } label: {
                 DRow(symbol: "iphone", title: "Archivos de Nova (este iPhone)", subtitle: "Gestor de almacenamiento · enviar al PC") {
                     Image(systemName: "chevron.right").foregroundColor(NovaTheme.faint)
@@ -294,6 +296,21 @@ struct NovaFilesView: View {
 
     var body: some View {
         List {
+            Section {
+                SendToPCButtons()
+                HStack(spacing: 10) {
+                    Button { importing = true } label: {
+                        Label("Añadir de Archivos", systemImage: "folder.badge.plus").font(.system(size: 13, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    PhotosPicker(selection: $photos, maxSelectionCount: 20, matching: .any(of: [.images, .videos]), photoLibrary: .shared()) {
+                        Label("Añadir de Fotos", systemImage: "photo.badge.plus").font(.system(size: 13, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                }
+            } footer: {
+                Text("«Enviar» manda el archivo directo al PC. «Añadir» lo guarda en Nova para enviarlo cuando quieras.")
+            }
             if rel.isEmpty {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
@@ -310,7 +327,7 @@ struct NovaFilesView: View {
             }
             Section {
                 if items.isEmpty {
-                    Text("Aquí no hay archivos. Añádelos con + o envíalos desde el PC.")
+                    Text("Aquí no hay archivos. Añádelos arriba o envíalos desde el PC.")
                         .font(.system(size: 13)).foregroundColor(NovaTheme.dim)
                 }
                 ForEach(items) { it in
@@ -326,18 +343,8 @@ struct NovaFilesView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button { importing = true } label: { Label("Desde Archivos", systemImage: "folder") }
-                    PhotosPicker(selection: $photos, maxSelectionCount: 20, matching: .any(of: [.images, .videos])) {
-                        Label("Desde Fotos", systemImage: "photo.on.rectangle")
-                    }
-                } label: { Image(systemName: "plus") }
-            }
-        }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result { importFiles(urls) }
+        .sheet(isPresented: $importing) {
+            DocumentPicker { urls in importFiles(urls) }.ignoresSafeArea()
         }
         .onChange(of: photos) { sel in
             guard !sel.isEmpty else { return }
@@ -531,5 +538,133 @@ struct PCPickSheet: View {
             }
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } } }
         }
+    }
+}
+
+
+// MARK: - v90 · Enviar directo al PC (Archivos y Fotos) y selector de documentos fiable
+
+/// Selector de la app Archivos de UIKit (asCopy: iOS copia el archivo para Nova; sin permisos raros).
+/// Sustituye a .fileImporter, que dentro de esta hoja no devolvía nada al pulsar «Abrir».
+struct DocumentPicker: UIViewControllerRepresentable {
+    let onPick: ([URL]) -> Void
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let vc = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+        vc.allowsMultipleSelection = true
+        vc.delegate = context.coordinator
+        return vc
+    }
+    func updateUIViewController(_ vc: UIDocumentPickerViewController, context: Context) {}
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onPick: ([URL]) -> Void
+        init(onPick: @escaping ([URL]) -> Void) { self.onPick = onPick }
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { onPick(urls) }
+    }
+}
+
+struct SendToPCButtons: View {
+    @ObservedObject private var link = NovaLink.shared
+    @State private var picking = false
+    @State private var photos: [PhotosPickerItem] = []
+    var body: some View {
+        HStack(spacing: 10) {
+            Button { picking = true } label: {
+                Label("Enviar archivos al PC", systemImage: "doc.badge.arrow.up")
+                    .font(.system(size: 13, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 38)
+            }
+            .buttonStyle(.borderedProminent).tint(NovaTheme.accent)
+            PhotosPicker(selection: $photos, maxSelectionCount: 20, matching: .any(of: [.images, .videos]), photoLibrary: .shared()) {
+                Label("Enviar fotos", systemImage: "photo.on.rectangle.angled")
+                    .font(.system(size: 13, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 38)
+            }
+            .buttonStyle(.borderedProminent).tint(NovaTheme.accent2)
+        }
+        .sheet(isPresented: $picking) {
+            DocumentPicker { urls in Task { await link.sendExternal(urls) } }.ignoresSafeArea()
+        }
+        .onChange(of: photos) { sel in
+            guard !sel.isEmpty else { return }
+            let items = sel
+            photos = []
+            Task { await link.sendPhotos(items) }
+        }
+    }
+}
+
+// MARK: - v90 · Pantalla «Se está compartiendo»
+
+/// Mientras el PC usa el iPhone, Nova solo muestra esto: no puedes tocar nada más (para no ralentizar la
+/// pestaña), solo dejar de compartir o desconectar. «Pantalla negra» apaga casi del todo la pantalla.
+struct NovaSharingCover: View {
+    @ObservedObject private var link = NovaLink.shared
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if link.dimmed {
+                VStack(spacing: 8) {
+                    Text("Compartiendo con \(link.connected?.name ?? "tu PC")")
+                        .font(.system(size: 13, weight: .medium)).foregroundColor(.white.opacity(0.35))
+                    Text("Toca para encender la pantalla").font(.system(size: 11)).foregroundColor(.white.opacity(0.22))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture { link.setDimmed(false) }
+            } else {
+                VStack(spacing: 22) {
+                    Spacer()
+                    ZStack {
+                        Circle().fill(NovaTheme.accent.opacity(0.18)).frame(width: 110, height: 110)
+                        Image(systemName: "laptopcomputer.and.iphone").font(.system(size: 44, weight: .semibold)).foregroundColor(.white)
+                    }
+                    VStack(spacing: 6) {
+                        Text("Se está compartiendo").font(.system(size: 26, weight: .bold)).foregroundColor(.white)
+                        Text("\(link.connected?.name ?? "Tu PC") está usando este iPhone para ejecutar \(link.remoteTabs.count == 1 ? "una pestaña" : "\(link.remoteTabs.count) pestañas").")
+                            .font(.system(size: 14)).foregroundColor(.white.opacity(0.65)).multilineTextAlignment(.center)
+                    }
+                    VStack(spacing: 8) {
+                        ForEach(link.remoteTabs) { h in SharingRow(host: h) }
+                    }
+                    .padding(.horizontal, 20)
+                    Text("La pantalla no se apagará sola. Si bloqueas el iPhone, la imagen se pausa y vuelve al desbloquear.")
+                        .font(.system(size: 12)).foregroundColor(.white.opacity(0.45)).multilineTextAlignment(.center).padding(.horizontal, 30)
+                    Spacer()
+                    VStack(spacing: 10) {
+                        Button { link.setDimmed(true) } label: {
+                            Label("Pantalla negra (ahorra batería)", systemImage: "moon.fill")
+                                .font(.system(size: 15, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 48)
+                                .foregroundColor(.white).background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.12)))
+                        }
+                        Button { link.stopSharing() } label: {
+                            Text("Dejar de compartir")
+                                .font(.system(size: 15, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 48)
+                                .foregroundColor(.white).background(RoundedRectangle(cornerRadius: 14).fill(NovaTheme.danger))
+                        }
+                        Button { link.stopSharing(); link.disconnect() } label: {
+                            Text("Desconectar del PC").font(.system(size: 14, weight: .medium)).foregroundColor(.white.opacity(0.6))
+                        }
+                        .padding(.top, 4)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 20)
+                }
+            }
+        }
+        .statusBarHidden(link.dimmed)
+    }
+}
+
+private struct SharingRow: View {
+    @ObservedObject var host: RemoteTabHost
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle().fill(Color.green).frame(width: 8, height: 8)
+            Text(host.title.isEmpty ? (URL(string: host.urlText)?.host ?? host.urlText) : host.title)
+                .font(.system(size: 13, weight: .medium)).foregroundColor(.white).lineLimit(1)
+            Spacer()
+            Text("\(host.fps) fps").font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundColor(.white.opacity(0.6))
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.07)))
     }
 }
