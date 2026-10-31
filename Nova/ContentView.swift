@@ -7,6 +7,8 @@ struct ContentView: View {
     @ObservedObject private var eq = EQModel.shared
     @ObservedObject private var login = QuickLogin.shared
     @ObservedObject private var panel = PanelStore.shared
+    @ObservedObject private var account = NovaAccount.shared
+    @State private var showAccount = false
     @State private var showSettings = false
     @State private var showTabs = false
     @State private var showEQ = false
@@ -48,6 +50,7 @@ struct ContentView: View {
                               openEQ: { showEQ = true },
                               eqOn: eq.s.enabled,
                               openPanel: { panel.setOpen(true) },
+                              openAccount: { showAccount = true },
                               newPrivateTab: {
                                   privacy.requestPrivateAccess { ok in
                                       if ok { model.createTab(private: true) }
@@ -89,10 +92,12 @@ struct ContentView: View {
             case .background:
                 privacy.enteredBackground(activeIsPrivate: model.activeTab.isPrivate)
                 cameFromBackground = true
+                account.appWentBackground()
             case .active:
                 if cameFromBackground {
                     cameFromBackground = false
                     privacy.unlock()
+                    account.appBecameActive()
                 }
             default:
                 break
@@ -100,6 +105,10 @@ struct ContentView: View {
         }
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { privacy.unlock() }
+        }
+        .sheet(isPresented: $showAccount) {
+            AccountHubView()
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
@@ -129,7 +138,7 @@ struct ContentView: View {
             if model.isPrivate {
                 PrivateTopBar(openSettings: { showSettings = true })
             } else {
-                HomeTopBar(openSettings: { showSettings = true })
+                HomeTopBar(openSettings: { showSettings = true }, openAccount: { showAccount = true })
             }
         } else {
             AddressBar(model: model, isEditing: $isEditingAddress)

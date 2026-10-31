@@ -27,7 +27,9 @@ private func homeFG(_ onWall: Bool) -> Color { onWall ? .white : NovaTheme.text 
 
 struct HomeTopBar: View {
     var openSettings: () -> Void
+    var openAccount: () -> Void = {}
     @ObservedObject private var wall = HomeBackgroundStore.shared
+    @ObservedObject private var account = NovaAccount.shared
     var body: some View {
         HStack {
             HStack(spacing: 9) {
@@ -37,6 +39,35 @@ struct HomeTopBar: View {
                     .foregroundColor(homeFG(wall.image != nil))
             }
             Spacer()
+            // Cuenta Nova: amigos, chat y perfil (como en Nova para Windows).
+            Button {
+                Haptics.tap()
+                openAccount()
+            } label: {
+                ZStack(alignment: .topTrailing) {
+                    if account.phase == .signedIn {
+                        NovaAvatar(name: account.me.name, color: account.me.avatarColor, url: account.me.avatarURL, size: 32, status: account.me.status)
+                            .frame(width: 40, height: 40)
+                            .novaGlass(radius: 14, shadow: false)
+                    } else {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(NovaTheme.ink(0.9))
+                            .frame(width: 40, height: 40)
+                            .novaGlass(radius: 14, shadow: false)
+                    }
+                    let n = account.unreadTotal + account.requests.count
+                    if n > 0 {
+                        Text(n > 99 ? "99+" : "\(n)")
+                            .font(.system(size: 10, weight: .bold, design: .rounded)).foregroundColor(.white)
+                            .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
+                            .background(Capsule().fill(Color(hex: 0xFF3B4E)))
+                            .offset(x: 6, y: -6)
+                    }
+                }
+            }
+            .buttonStyle(PressableStyle())
+            .accessibilityLabel("Amigos y chat")
             Button {
                 Haptics.tap()
                 openSettings()

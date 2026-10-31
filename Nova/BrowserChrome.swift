@@ -333,6 +333,7 @@ struct BottomBar: View {
     var openEQ: () -> Void = {}
     var eqOn = false
     var openPanel: () -> Void = {}
+    var openAccount: () -> Void = {}
     var newPrivateTab: () -> Void = {}
 
     var body: some View {
@@ -390,6 +391,9 @@ struct BottomBar: View {
                 }
             }
             if !model.isPrivate {
+                Button(action: openAccount) {
+                    Label("Amigos y chat", systemImage: "person.2.fill")
+                }
                 Button(action: openPanel) {
                     Label("Panel de apps", systemImage: "sidebar.left")
                 }

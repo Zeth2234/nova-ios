@@ -160,3 +160,24 @@ Nova/AppPanelManager.swift (personalizar, NUEVO). Copia de lo anterior en _backu
 - Opciones (Configuración > Panel de apps): asa, panel ampliado, mini reproductor, contadores y
   "Solo una app con sonido" (al sonar una, se pausan las demás).
 - Las pestañas privadas nunca aparecen en el panel.
+
+CUENTA NOVA: AMIGOS, CHAT Y PERFIL (igual que Nova Windows y la web)
+====================================================================
+Archivos nuevos: Nova/NovaCloud.swift (conexión con Supabase), Nova/NovaAccount.swift (cuenta,
+amigos, grupos), Nova/NovaChat.swift (conversaciones), Nova/NovaSocialViews.swift (pantallas).
+Cambios pequeños en ContentView, HomeView (botón de cuenta) y BrowserChrome (menú "..." > Amigos y chat).
+Copia de lo anterior en _backup-cuenta-antes/ (no hace falta subirla a GitHub).
+- Misma cuenta Nova: iniciar sesión, crear cuenta con el código de 8 números del correo,
+  "¿Has olvidado la contraseña?" y verificación en dos pasos con Google Authenticator.
+  La sesión se guarda en el llavero del iPhone.
+- Chats: amigos y grupos, ordenados por el último mensaje, con no leídos y buscador.
+- Conversación: enviar, editar y eliminar tus mensajes (mantén pulsado), copiar, enlaces pulsables,
+  "Visto", reintentar si falla, cargar mensajes anteriores. Se actualiza cada pocos segundos y
+  avisa de "escribiendo" a tus amigos en Windows/web.
+- Amigos: tu código (copiar / compartir), añadir por código con vista previa, aceptar o rechazar
+  solicitudes, lista con estado (en línea, ocupado, ausente...), ver perfil y eliminar amigo.
+- Perfil: tarjeta con banner, foto, insignias, descripción, "Sobre mí", campos y "Miembro desde".
+  Cambiar estado. Personalizar: foto, banner, nombre, @usuario (comprueba si está libre),
+  pronombres, descripción, sobre mí, 3 campos, colores, decoración y privacidad.
+- Mientras Nova está abierta tus amigos te ven "En línea"; al salir pasa a desconectado.
+- Pendiente (se hace desde Windows): estilo del nombre, fotos animadas (GIF) y crear/editar grupos.
