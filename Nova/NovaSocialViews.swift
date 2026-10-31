@@ -738,13 +738,15 @@ struct ChatView: View {
                         if i == 0 || !Calendar.current.isDate(m.at, inSameDayAs: chat.messages[i - 1].at) {
                             DaySeparator(date: m.at)
                         }
-                        MessageBubble(message: m, mine: m.sender == account.me.userId,
-                                      showName: isGroup && m.sender != account.me.userId && (i == 0 || chat.messages[i - 1].sender != m.sender),
-                                      senderName: senderName(m.sender),
-                                      seen: seenText(m, index: i),
-                                      onEdit: { chat.editing = m; draft = m.body; focused = true },
-                                      onDelete: { chat.delete(m) },
-                                      onRetry: { chat.retry(m) })
+                        let who = person(m.sender)
+                        MessageRow(message: m, mine: m.sender == account.me.userId,
+                                   showHeader: !isContinuation(i),
+                                   name: who.name, color: who.color, avatarURL: who.url,
+                                   seen: seenText(m, index: i),
+                                   onEdit: { chat.editing = m; draft = m.body; focused = true },
+                                   onDelete: { chat.delete(m) },
+                                   onRetry: { chat.retry(m) },
+                                   onProfile: { if m.sender != account.me.userId { showProfile = m.sender } })
                             .id(m.key)
                     }
                     Color.clear.frame(height: 6).id("bottom")
@@ -761,6 +763,24 @@ struct ChatView: View {
     }
 
     private var isGroup: Bool { if case .group = target { return true }; return false }
+
+    /// Foto, nombre y color de quien envía (tú, tu amigo o un miembro del grupo).
+    private func person(_ id: String) -> (name: String, color: String, url: URL?) {
+        if id == account.me.userId { return (account.me.name, account.me.avatarColor, account.me.avatarURL) }
+        if case .group(let gid) = target, let mem = account.group(gid)?.members.first(where: { $0.id == id }) {
+            return (mem.name, mem.avatarColor, mem.avatarURL)
+        }
+        if let f = account.friend(id) { return (f.name, f.avatarColor, f.avatarURL) }
+        return ("Antiguo miembro", "#7d7890", nil)
+    }
+
+    /// Mensaje seguido de la misma persona en menos de 5 minutos: va sin cabecera (como en Nova Windows).
+    private func isContinuation(_ i: Int) -> Bool {
+        guard i > 0 else { return false }
+        let prev = chat.messages[i - 1], m = chat.messages[i]
+        return prev.sender == m.sender && prev.system.isEmpty && m.system.isEmpty
+            && m.at.timeIntervalSince(prev.at) < 300 && Calendar.current.isDate(m.at, inSameDayAs: prev.at)
+    }
 
     private func senderName(_ id: String) -> String {
         if case .group(let gid) = target { return account.group(gid)?.members.first { $0.id == id }?.name ?? "Antiguo miembro" }
@@ -844,15 +864,18 @@ struct DaySeparator: View {
     }
 }
 
-struct MessageBubble: View {
+struct MessageRow: View {
     let message: ChatMessage
     let mine: Bool
-    let showName: Bool
-    let senderName: String
+    let showHeader: Bool
+    let name: String
+    let color: String
+    let avatarURL: URL?
     let seen: String?
     let onEdit: () -> Void
     let onDelete: () -> Void
     let onRetry: () -> Void
+    let onProfile: () -> Void
 
     private static let timeFmt: DateFormatter = {
         let f = DateFormatter(); f.dateFormat = "HH:mm"; return f
@@ -875,64 +898,91 @@ struct MessageBubble: View {
         if !message.system.isEmpty {
             Text(message.body.isEmpty ? "Aviso del grupo" : message.body)
                 .font(.system(size: 12)).foregroundColor(NovaTheme.faint)
-                .frame(maxWidth: .infinity).padding(.vertical, 4)
+                .frame(maxWidth: .infinity).padding(.vertical, 6)
         } else {
-            VStack(alignment: mine ? .trailing : .leading, spacing: 2) {
-                if showName {
-                    Text(senderName).font(.system(size: 11.5, weight: .semibold)).foregroundColor(NovaTheme.accent).padding(.horizontal, 6)
+            HStack(alignment: .top, spacing: 10) {
+                // Foto de perfil (solo en el primer mensaje del grupo de mensajes)
+                if showHeader {
+                    Button(action: onProfile) {
+                        NovaAvatar(name: name, color: color, url: avatarURL, size: 38)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Ver el perfil de \(name)")
+                } else {
+                    Text(Self.timeFmt.string(from: message.at))
+                        .font(.system(size: 9.5)).foregroundColor(NovaTheme.faint.opacity(0.0))
+                        .frame(width: 38)
                 }
-                HStack {
-                    if mine { Spacer(minLength: 50) }
-                    bubble
-                    if !mine { Spacer(minLength: 50) }
+                VStack(alignment: .leading, spacing: 3) {
+                    if showHeader {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Button(action: onProfile) {
+                                Text(name)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(mine ? NovaTheme.accent : NovaTheme.text)
+                                    .lineLimit(1)
+                            }
+                            .buttonStyle(.plain)
+                            Text(Self.timeFmt.string(from: message.at))
+                                .font(.system(size: 11)).foregroundColor(NovaTheme.faint)
+                        }
+                    }
+                    content
+                    if let s = seen {
+                        Text(s).font(.system(size: 11)).foregroundColor(NovaTheme.faint)
+                    }
+                    if message.failed {
+                        Button("No enviado · Toca para reintentar", action: onRetry)
+                            .font(.system(size: 11.5, weight: .medium)).foregroundColor(NovaTheme.danger)
+                    }
                 }
-                if let s = seen {
-                    Text(s).font(.system(size: 11)).foregroundColor(NovaTheme.faint).padding(.horizontal, 6)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .padding(.top, showHeader ? 8 : 0)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(message.failed ? NovaTheme.danger.opacity(0.08) : Color.clear)
+            )
+            .contentShape(Rectangle())
+            .contextMenu {
+                if !message.deleted {
+                    Button { UIPasteboard.general.string = message.body } label: { Label("Copiar", systemImage: "doc.on.doc") }
+                    if mine && message.id > 0 {
+                        Button(action: onEdit) { Label("Editar", systemImage: "pencil") }
+                        Button(role: .destructive, action: onDelete) { Label("Eliminar", systemImage: "trash") }
+                    }
                 }
-                if message.failed {
-                    Button("No enviado · Toca para reintentar", action: onRetry)
-                        .font(.system(size: 11.5, weight: .medium)).foregroundColor(NovaTheme.danger)
+                if !mine {
+                    Button(action: onProfile) { Label("Ver perfil", systemImage: "person.crop.circle") }
                 }
             }
-            .padding(.top, showName ? 6 : 0)
         }
     }
 
-    private var bubble: some View {
-        VStack(alignment: .trailing, spacing: 3) {
-            if message.deleted {
-                Text("Mensaje eliminado").italic().foregroundColor(mine ? .white.opacity(0.7) : NovaTheme.faint)
-            } else {
+    @ViewBuilder private var content: some View {
+        if message.deleted {
+            Text("Mensaje eliminado")
+                .italic()
+                .font(.system(size: 15))
+                .foregroundColor(NovaTheme.faint)
+        } else {
+            HStack(alignment: .lastTextBaseline, spacing: 6) {
                 Text(Self.linkified(message.body))
-                    .foregroundColor(mine ? .white : NovaTheme.text)
-                    .tint(mine ? .white : NovaTheme.accent2)
+                    .font(.system(size: 15.5))
+                    .foregroundColor(NovaTheme.text)
+                    .tint(NovaTheme.accent2)
                     .textSelection(.enabled)
-            }
-            HStack(spacing: 4) {
-                if message.edited && !message.deleted { Text("editado") }
-                Text(Self.timeFmt.string(from: message.at))
-                if mine {
-                    Image(systemName: message.pending ? "clock" : (message.failed ? "exclamationmark.circle" : "checkmark"))
+                    .fixedSize(horizontal: false, vertical: true)
+                if message.edited {
+                    Text("(editado)").font(.system(size: 11)).foregroundColor(NovaTheme.faint)
+                }
+                if mine && message.pending {
+                    Image(systemName: "clock").font(.system(size: 10)).foregroundColor(NovaTheme.faint)
                 }
             }
-            .font(.system(size: 10.5))
-            .foregroundColor(mine ? .white.opacity(0.7) : NovaTheme.faint)
-        }
-        .font(.system(size: 15.5))
-        .padding(.horizontal, 13).padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(mine ? AnyShapeStyle(NovaTheme.accentGradient) : AnyShapeStyle(NovaTheme.ink(0.07)))
-        )
-        .opacity(message.pending ? 0.7 : 1)
-        .contextMenu {
-            if !message.deleted {
-                Button { UIPasteboard.general.string = message.body } label: { Label("Copiar", systemImage: "doc.on.doc") }
-                if mine && message.id > 0 {
-                    Button(action: onEdit) { Label("Editar", systemImage: "pencil") }
-                    Button(role: .destructive, action: onDelete) { Label("Eliminar", systemImage: "trash") }
-                }
-            }
+            .opacity(message.pending ? 0.6 : 1)
         }
     }
 }
