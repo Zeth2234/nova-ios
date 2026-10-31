@@ -8,6 +8,7 @@ struct ContentView: View {
     @ObservedObject private var login = QuickLogin.shared
     @ObservedObject private var panel = PanelStore.shared
     @ObservedObject private var account = NovaAccount.shared
+    @ObservedObject private var link = NovaLink.shared
     @State private var showAccount = false
     @State private var showSettings = false
     @State private var showTabs = false
@@ -93,11 +94,13 @@ struct ContentView: View {
                 privacy.enteredBackground(activeIsPrivate: model.activeTab.isPrivate)
                 cameFromBackground = true
                 account.appWentBackground()
+                link.appWentBackground()
             case .active:
                 if cameFromBackground {
                     cameFromBackground = false
                     privacy.unlock()
                     account.appBecameActive()
+                    link.appBecameActive()
                 }
             default:
                 break
@@ -105,6 +108,22 @@ struct ContentView: View {
         }
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { privacy.unlock() }
+            link.model = model
+            link.connectIfNeeded()
+        }
+        .onChange(of: account.phase) { phase in if phase == .signedIn { link.connectIfNeeded(force: true) } }
+        .overlay(alignment: .bottom) {
+            if !link.showDevices { NovaLinkToast().padding(.bottom, 60) }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: link.toast)
+        // v88 · Dispositivos: emparejar con el PC, Puente móvil, Transferencias y archivos.
+        .sheet(isPresented: $link.showDevices) {
+            NovaDevicesView(model: model)
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $link.pcPick) { req in
+            PCPickSheet(request: req)
+                .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showAccount) {
             AccountHubView()
