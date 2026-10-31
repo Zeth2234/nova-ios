@@ -39,13 +39,19 @@ final class ScreenPipeline: @unchecked Sendable {
     }
     private var geo: (CGFloat, CGFloat, CGFloat)?
 
-    func sendDone() { lock.lock(); inFlight = max(0, inFlight - 1); lock.unlock() }
+    private var lastDone = CACurrentMediaTime()
+    /// v92 · Se cuenta al ENVIAR (no al codificar): si el codificador descartaba un fotograma, el contador
+    /// nunca bajaba y la imagen se quedaba congelada (1 fps). Además se desatasca solo si pasa medio segundo.
+    func sending() { lock.lock(); inFlight += 1; lock.unlock() }
+    func sendDone() { lock.lock(); inFlight = max(0, inFlight - 1); lastDone = CACurrentMediaTime(); lock.unlock() }
     func takeFrames() -> Int { lock.lock(); defer { lock.unlock() }; let f = frames; frames = 0; return f }
 
     func process(_ sample: CMSampleBuffer) {
         guard let src = CMSampleBufferGetImageBuffer(sample) else { return }
         lock.lock()
-        if inFlight > 2 { lock.unlock(); return }
+        if inFlight > 3 {
+            if CACurrentMediaTime() - lastDone > 0.5 { inFlight = 0 } else { lock.unlock(); return }
+        }
         let wb = CGFloat(CVPixelBufferGetWidth(src)), hb = CGFloat(CVPixelBufferGetHeight(src))
         guard let g = geo, winWidth > 0, hb > wb else { lock.unlock(); return }
         if transform == nil {
@@ -57,10 +63,9 @@ final class ScreenPipeline: @unchecked Sendable {
             transform = CGAffineTransform(a: 0, b: a, c: -a, d: 0, tx: a * (hb - s * g.1), ty: q * 800 - a * s * g.0)
         }
         let t = transform!
-        inFlight += 1
         frames += 1
         lock.unlock()
-        guard let dst = encoder.makeBuffer() else { sendDone(); return }
+        guard let dst = encoder.makeBuffer() else { return }
         let img = CIImage(cvPixelBuffer: src).transformed(by: t).cropped(to: CGRect(x: 0, y: 0, width: outW, height: outH))
         ci.render(img, to: dst, bounds: CGRect(x: 0, y: 0, width: outW, height: outH), colorSpace: CGColorSpaceCreateDeviceRGB())
         encoder.encode(dst)
@@ -92,6 +97,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
     private var displayLink: CADisplayLink?
     private var pendingSends = 0
     private var drawMs: Double = 0
+    private var lastSendDone = CACurrentMediaTime()
     private var halfRate = false
     private var skip = false
 
@@ -198,6 +204,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
             pipe.setGeometry(x1: geo.x1, y0: geo.y0, k: geo.k, winWidth: geo.winWidth)
             pipeline = pipe
             enc.onFrame = { @Sendable data, key in
+                pipe.sending()
                 Task { @MainActor in
                     NovaLink.shared.sendVideoFrame(rid: rid, key: key, data: data) { pipe.sendDone() }
                 }
@@ -232,7 +239,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
                 guard let self = self, !self.closed else { return }
                 self.pendingSends += 1
                 NovaLink.shared.sendVideoFrame(rid: rid, key: key, data: data) { [weak self] in
-                    Task { @MainActor in if let self = self { self.pendingSends = max(0, self.pendingSends - 1) } }
+                    Task { @MainActor in if let self = self { self.pendingSends = max(0, self.pendingSends - 1); self.lastSendDone = CACurrentMediaTime() } }
                 }
             }
         }
@@ -277,7 +284,9 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
 
     private func videoTick() {
         guard !closed, let enc = encoder, webView.superview != nil else { return }
-        if pendingSends > 2 { return }
+        if pendingSends > 3 {
+            if CACurrentMediaTime() - lastSendDone > 0.5 { pendingSends = 0 } else { return }
+        }
         skip.toggle()
         if halfRate && skip { return }
         let t0 = CACurrentMediaTime()
