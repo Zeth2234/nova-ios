@@ -198,8 +198,8 @@ final class ChatSession: ObservableObject {
             let j = try await client.rpc("nova_edit_message", ["p_message": m.id, "p_body": body])
             if j["result"].str == "ok" || j["result"].isNull {
                 if let i = messages.firstIndex(where: { $0.id == m.id }) { messages[i].body = body; messages[i].edited = true }
-            } else { error = "No se pudo editar el mensaje." }
-        } catch { error = "No se pudo editar el mensaje." }
+            } else { self.error = "No se pudo editar el mensaje." }
+        } catch { self.error = "No se pudo editar el mensaje." }
     }
 
     func delete(_ m: ChatMessage) {
