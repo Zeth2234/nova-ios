@@ -167,6 +167,8 @@ final class NovaLink: ObservableObject {
     @Published var showDevices = false
     @Published var toast: String?
     @Published var pcPick: PCPickRequest?
+    /// v91 · Alto (en puntos) de la zona de arriba donde se ve la pestaña que se graba a 60 fps (0 = oculta).
+    @Published var shareRegionHeight: CGFloat = 0
 
     weak var model: BrowserModel?
 
@@ -677,7 +679,7 @@ final class NovaLink: ObservableObject {
         let now = !remoteTabs.isEmpty
         guard now != was else { return }
         UIApplication.shared.isIdleTimerDisabled = now
-        if now { startKeepAlive() } else { stopKeepAlive(); setDimmed(false) }
+        if now { startKeepAlive() } else { stopKeepAlive(); setDimmed(false); shareRegionHeight = 0 }
     }
 
     private func startKeepAlive() {

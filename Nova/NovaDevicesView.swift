@@ -601,7 +601,9 @@ struct NovaSharingCover: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if link.dimmed {
+            if link.shareRegionHeight > 0 {
+                compact
+            } else if link.dimmed {
                 VStack(spacing: 8) {
                     Text("Compartiendo con \(link.connected?.name ?? "tu PC")")
                         .font(.system(size: 13, weight: .medium)).foregroundColor(.white.opacity(0.35))
@@ -611,46 +613,86 @@ struct NovaSharingCover: View {
                 .contentShape(Rectangle())
                 .onTapGesture { link.setDimmed(false) }
             } else {
-                VStack(spacing: 22) {
-                    Spacer()
-                    ZStack {
-                        Circle().fill(NovaTheme.accent.opacity(0.18)).frame(width: 110, height: 110)
-                        Image(systemName: "laptopcomputer.and.iphone").font(.system(size: 44, weight: .semibold)).foregroundColor(.white)
-                    }
-                    VStack(spacing: 6) {
-                        Text("Se está compartiendo").font(.system(size: 26, weight: .bold)).foregroundColor(.white)
-                        Text("\(link.connected?.name ?? "Tu PC") está usando este iPhone para ejecutar \(link.remoteTabs.count == 1 ? "una pestaña" : "\(link.remoteTabs.count) pestañas").")
-                            .font(.system(size: 14)).foregroundColor(.white.opacity(0.65)).multilineTextAlignment(.center)
-                    }
-                    VStack(spacing: 8) {
-                        ForEach(link.remoteTabs) { h in SharingRow(host: h) }
-                    }
-                    .padding(.horizontal, 20)
-                    Text("La pantalla no se apagará sola. Si bloqueas el iPhone, la imagen se pausa y vuelve al desbloquear.")
-                        .font(.system(size: 12)).foregroundColor(.white.opacity(0.45)).multilineTextAlignment(.center).padding(.horizontal, 30)
-                    Spacer()
-                    VStack(spacing: 10) {
-                        Button { link.setDimmed(true) } label: {
-                            Label("Pantalla negra (ahorra batería)", systemImage: "moon.fill")
-                                .font(.system(size: 15, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 48)
-                                .foregroundColor(.white).background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.12)))
-                        }
-                        Button { link.stopSharing() } label: {
-                            Text("Dejar de compartir")
-                                .font(.system(size: 15, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 48)
-                                .foregroundColor(.white).background(RoundedRectangle(cornerRadius: 14).fill(NovaTheme.danger))
-                        }
-                        Button { link.stopSharing(); link.disconnect() } label: {
-                            Text("Desconectar del PC").font(.system(size: 14, weight: .medium)).foregroundColor(.white.opacity(0.6))
-                        }
-                        .padding(.top, 4)
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 20)
-                }
+                full
             }
         }
         .statusBarHidden(link.dimmed)
+    }
+
+    /// Modo 60 fps: arriba se ve la pestaña (es lo que se graba); abajo, solo los controles.
+    private var compact: some View {
+        VStack(spacing: 12) {
+            Color.clear.frame(height: link.shareRegionHeight)
+            HStack(spacing: 8) {
+                Circle().fill(Color.red).frame(width: 8, height: 8)
+                Text("Se está compartiendo con \(link.connected?.name ?? "tu PC")")
+                    .font(.system(size: 14, weight: .semibold)).foregroundColor(.white).lineLimit(1)
+                Spacer()
+                if let h = link.remoteTabs.first { FpsBadge(host: h) }
+            }
+            .padding(.horizontal, 18)
+            HStack(spacing: 10) {
+                Button { link.setDimmed(!link.dimmed) } label: {
+                    Label(link.dimmed ? "Brillo normal" : "Bajar brillo", systemImage: link.dimmed ? "sun.max.fill" : "moon.fill")
+                        .font(.system(size: 14, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 44)
+                        .foregroundColor(.white).background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.12)))
+                }
+                Button { link.stopSharing() } label: {
+                    Text("Dejar de compartir")
+                        .font(.system(size: 14, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 44)
+                        .foregroundColor(.white).background(RoundedRectangle(cornerRadius: 12).fill(NovaTheme.danger))
+                }
+            }
+            .padding(.horizontal, 18)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var full: some View {
+        VStack(spacing: 22) {
+            Spacer()
+            ZStack {
+                Circle().fill(NovaTheme.accent.opacity(0.18)).frame(width: 110, height: 110)
+                Image(systemName: "laptopcomputer.and.iphone").font(.system(size: 44, weight: .semibold)).foregroundColor(.white)
+            }
+            VStack(spacing: 6) {
+                Text("Se está compartiendo").font(.system(size: 26, weight: .bold)).foregroundColor(.white)
+                Text("\(link.connected?.name ?? "Tu PC") está usando este iPhone para ejecutar \(link.remoteTabs.count == 1 ? "una pestaña" : "\(link.remoteTabs.count) pestañas").")
+                    .font(.system(size: 14)).foregroundColor(.white.opacity(0.65)).multilineTextAlignment(.center)
+            }
+            VStack(spacing: 8) {
+                ForEach(link.remoteTabs) { h in SharingRow(host: h) }
+            }
+            .padding(.horizontal, 20)
+            Text("La pantalla no se apagará sola. Si bloqueas el iPhone, la imagen se pausa y vuelve al desbloquear.")
+                .font(.system(size: 12)).foregroundColor(.white.opacity(0.45)).multilineTextAlignment(.center).padding(.horizontal, 30)
+            Spacer()
+            VStack(spacing: 10) {
+                Button { link.setDimmed(true) } label: {
+                    Label("Pantalla negra (ahorra batería)", systemImage: "moon.fill")
+                        .font(.system(size: 15, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 48)
+                        .foregroundColor(.white).background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.12)))
+                }
+                Button { link.stopSharing() } label: {
+                    Text("Dejar de compartir")
+                        .font(.system(size: 15, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 48)
+                        .foregroundColor(.white).background(RoundedRectangle(cornerRadius: 14).fill(NovaTheme.danger))
+                }
+                Button { link.stopSharing(); link.disconnect() } label: {
+                    Text("Desconectar del PC").font(.system(size: 14, weight: .medium)).foregroundColor(.white.opacity(0.6))
+                }
+                .padding(.top, 4)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 20)
+        }
+    }
+}
+
+private struct FpsBadge: View {
+    @ObservedObject var host: RemoteTabHost
+    var body: some View {
+        Text("\(host.fps) fps").font(.system(size: 12, weight: .bold).monospacedDigit()).foregroundColor(.white.opacity(0.7))
     }
 }
 

@@ -1,12 +1,71 @@
 import SwiftUI
 import WebKit
 import UIKit
+import ReplayKit
+import CoreImage
 
 // ════════════════════════════════════════════════════════════════════════════════════
-//  Pestañas del PC que se ejecutan en este iPhone (v88).
-//  Un WKWebView invisible de 1280 × 800 con vista de ordenador carga la página aquí;
-//  Nova manda fotogramas JPEG al PC y recibe los clics, la rueda y el teclado.
+//  Pestañas del PC que se ejecutan en este iPhone (v91).
+//  · La página se carga en vista de ORDENADOR (1280 × 800, como en el PC).
+//  · Modo 60 fps: la página se muestra en la pantalla del iPhone (girada) y la graba
+//    ReplayKit, que entrega 60 imágenes por segundo sin gastar CPU; se recorta, se gira y
+//    se codifica en H.264 por hardware. Si no das permiso para grabar, se usa el modo lento.
 // ════════════════════════════════════════════════════════════════════════════════════
+
+/// Recorte + giro + escalado en la GPU y codificación. Trabaja en el hilo de ReplayKit.
+final class ScreenPipeline: @unchecked Sendable {
+    private let lock = NSLock()
+    private let ci = CIContext(options: [.cacheIntermediates: false])
+    private var transform: CGAffineTransform?
+    private var winWidth: CGFloat = 0
+    private var inFlight = 0
+    private(set) var frames = 0
+    let encoder: H264Encoder
+    let outW: Int, outH: Int
+
+    init(encoder: H264Encoder) {
+        self.encoder = encoder
+        outW = encoder.width
+        outH = encoder.height
+    }
+
+    /// Dónde está la página en la pantalla (en puntos): borde derecho, borde superior, escala y ancho de ventana.
+    func setGeometry(x1: CGFloat, y0: CGFloat, k: CGFloat, winWidth: CGFloat) {
+        lock.lock(); defer { lock.unlock() }
+        self.winWidth = winWidth
+        // Guardamos los datos; la transformación exacta depende del tamaño del búfer (se calcula al llegar).
+        geo = (x1, y0, k)
+        transform = nil
+    }
+    private var geo: (CGFloat, CGFloat, CGFloat)?
+
+    func sendDone() { lock.lock(); inFlight = max(0, inFlight - 1); lock.unlock() }
+    func takeFrames() -> Int { lock.lock(); defer { lock.unlock() }; let f = frames; frames = 0; return f }
+
+    func process(_ sample: CMSampleBuffer) {
+        guard let src = CMSampleBufferGetImageBuffer(sample) else { return }
+        lock.lock()
+        if inFlight > 2 { lock.unlock(); return }
+        let wb = CGFloat(CVPixelBufferGetWidth(src)), hb = CGFloat(CVPixelBufferGetHeight(src))
+        guard let g = geo, winWidth > 0, hb > wb else { lock.unlock(); return }
+        if transform == nil {
+            // Página girada 90° a la derecha en pantalla: el punto (u, v) de la web está en
+            // pantalla en (x1 − v·k, y0 + u·k). CoreImage tiene el origen abajo a la izquierda.
+            let s = wb / winWidth
+            let q = CGFloat(outW) / 1280
+            let a = q / (s * g.2)
+            transform = CGAffineTransform(a: 0, b: a, c: -a, d: 0, tx: a * (hb - s * g.1), ty: q * 800 - a * s * g.0)
+        }
+        let t = transform!
+        inFlight += 1
+        frames += 1
+        lock.unlock()
+        guard let dst = encoder.makeBuffer() else { sendDone(); return }
+        let img = CIImage(cvPixelBuffer: src).transformed(by: t).cropped(to: CGRect(x: 0, y: 0, width: outW, height: outH))
+        ci.render(img, to: dst, bounds: CGRect(x: 0, y: 0, width: outW, height: outH), colorSpace: CGColorSpaceCreateDeviceRGB())
+        encoder.encode(dst)
+    }
+}
 
 @MainActor
 final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
@@ -15,6 +74,8 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
     @Published private(set) var title = ""
     @Published private(set) var urlText = ""
     @Published private(set) var fps = 0
+    /// true = se ve en la pantalla del iPhone y se graba a 60 fps.
+    @Published private(set) var onScreen = false
 
     private var frameTimer: Timer?
     private var statsTimer: Timer?
@@ -23,11 +84,11 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
     private var frames = 0
     private var closed = false
     private var observers: [NSKeyValueObservation] = []
-    /// v89 · "h264" = vídeo a 60 fps (por defecto) · "jpeg" = modo compatible (fotos).
     private(set) var mode = "h264"
     private(set) var outW = 1920
     private(set) var outH = 1200
     private var encoder: H264Encoder?
+    private var pipeline: ScreenPipeline?
     private var displayLink: CADisplayLink?
     private var pendingSends = 0
     private var drawMs: Double = 0
@@ -35,31 +96,13 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
     private var skip = false
 
     static let desktopUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15"
+    /// Solo una pestaña puede usar la grabación de pantalla a la vez.
+    static weak var recording: RemoteTabHost?
 
     init(rid: String, url: String, mode: String = "h264", width: Int = 1920) {
         id = rid
         let config = WKWebViewConfiguration()
-        // v90 · Vista de ordenador sin pintar de más: la vista mide 640 × 400 puntos (1920 × 1200 píxeles en
-        // el iPhone) y la web se maqueta a 1280 × 800 reducida a la mitad. Antes se pintaba a 3840 × 2400.
-        config.defaultWebpagePreferences.preferredContentMode = .mobile
-        config.userContentController.addUserScript(WKUserScript(source: """
-        (function(){
-          var C = 'width=1280, initial-scale=0.5, minimum-scale=0.5, maximum-scale=0.5, user-scalable=no';
-          function fix(){
-            try {
-              var ms = document.querySelectorAll('meta[name=viewport]');
-              for (var i = 1; i < ms.length; i++) ms[i].remove();
-              var m = ms[0];
-              if (!m) { m = document.createElement('meta'); m.name = 'viewport'; (document.head || document.documentElement).appendChild(m); }
-              if (m.content !== C) m.content = C;
-            } catch (e) {}
-          }
-          fix();
-          document.addEventListener('DOMContentLoaded', fix);
-          window.addEventListener('load', fix);
-          setTimeout(fix, 1500);
-        })();
-        """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.defaultWebpagePreferences.preferredContentMode = .desktop
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         // Sin ventanas nuevas: los enlaces que abrirían otra pestaña se abren en esta.
@@ -72,17 +115,15 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
           }, true);
         })();
         """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 640, height: 400), configuration: config)
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.scrollView.bouncesZoom = false
+        webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1280, height: 800), configuration: config)
         webView.customUserAgent = RemoteTabHost.desktopUA
         webView.isUserInteractionEnabled = false
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         super.init()
         urlText = url
         self.mode = mode == "jpeg" ? "jpeg" : "h264"
         outW = max(960, min(1920, width)) & ~1
         outH = (outW * 800 / 1280) & ~1
-        applyGeometry()
         UIDevice.current.isBatteryMonitoringEnabled = true
         observers.append(webView.observe(\.title, options: [.new]) { wv, _ in
             let t = wv.title ?? ""
@@ -100,72 +141,123 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         }
     }
 
-    /// Se coloca detrás de toda la interfaz de Nova: se dibuja, pero no se ve.
-    /// Se encoge (solo en pantalla) para quedar entera dentro de la ventana: así WebKit pinta la página
-    /// completa a 1280 × 800 y no solo el trozo que cabría en la pantalla del iPhone.
-    private func attach() {
+    private var window: UIWindow? {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let windows = scenes.flatMap { $0.windows }
-        if let win = windows.first(where: { $0.isKeyWindow }) ?? windows.first {
-            win.insertSubview(webView, at: 0)
-            placeInWindow()
-        }
+        return windows.first(where: { $0.isKeyWindow }) ?? windows.first
     }
 
-    /// La vista siempre mide 640 × 400 puntos; la web cree que mide 1280 × 800 (meta viewport a 0,5).
-    private func applyGeometry() {
+    /// Escondida detrás de toda la interfaz (modo lento), encogida para quedar entera dentro de la ventana.
+    private func attach() {
+        guard let win = window else { return }
+        webView.removeFromSuperview()
         webView.transform = .identity
-        webView.bounds = CGRect(x: 0, y: 0, width: 640, height: 400)
-        placeInWindow()
-    }
-
-    private func placeInWindow() {
-        guard let win = webView.window else { return }
-        let b = webView.bounds
-        let k = min(1, min(win.bounds.width / b.width, win.bounds.height / b.height))
+        webView.bounds = CGRect(x: 0, y: 0, width: 1280, height: 800)
+        let k = min(1, min(win.bounds.width / 1280, win.bounds.height / 800))
+        win.insertSubview(webView, at: 0)
         webView.transform = CGAffineTransform(scaleX: k, y: k)
-        webView.center = CGPoint(x: b.width * k / 2, y: b.height * k / 2)
+        webView.center = CGPoint(x: 640 * k, y: 400 * k)
+        if onScreen { NovaLink.shared.shareRegionHeight = 0 }
+        onScreen = false
     }
 
-    // MARK: Captura (v89)
+    /// Modo 60 fps: la página se ve en la pantalla del iPhone, girada para aprovecharla (como un vídeo apaisado).
+    private func showOnScreen() -> (x1: CGFloat, y0: CGFloat, k: CGFloat, winWidth: CGFloat)? {
+        guard let win = window else { return nil }
+        let safeTop = win.safeAreaInsets.top
+        let W = win.bounds.width, H = win.bounds.height
+        let k = min((W - 12) / 800, (H - safeTop - 250) / 1280)
+        let w = 800 * k, h = 1280 * k
+        let x0 = ((W - w) / 2).rounded(), y0 = (safeTop + 10).rounded()
+        webView.removeFromSuperview()
+        webView.transform = .identity
+        webView.bounds = CGRect(x: 0, y: 0, width: 1280, height: 800)
+        win.addSubview(webView)
+        webView.transform = CGAffineTransform(rotationAngle: .pi / 2).scaledBy(x: k, y: k)
+        webView.center = CGPoint(x: x0 + w / 2, y: y0 + h / 2)
+        webView.layer.cornerRadius = 0
+        onScreen = true
+        NovaLink.shared.shareRegionHeight = h + 18
+        return (x0 + w, y0, k, W)
+    }
+
+    // MARK: Captura
 
     private func startCapture() {
         stopCapture()
-        if mode == "h264", let enc = H264Encoder(width: outW, height: outH, fps: 60, bitrate: outW >= 1900 ? 8_000_000 : 4_500_000) {
-            let rid = id, ew = enc.width, eh = enc.height
-            // @Sendable: VideoToolbox los llama desde su propio hilo.
-            enc.onConfig = { @Sendable avcc in
-                Task { @MainActor in NovaLink.shared.sendVideoConfig(rid: rid, width: ew, height: eh, avcc: avcc) }
-            }
-            enc.onFrame = { @Sendable [weak self] data, key in
+        guard mode == "h264", let enc = H264Encoder(width: outW, height: outH, fps: 60, bitrate: outW >= 1900 ? 9_000_000 : 5_000_000) else {
+            startJPEG(); return
+        }
+        let rid = id, ew = enc.width, eh = enc.height
+        enc.onConfig = { @Sendable avcc in
+            Task { @MainActor in NovaLink.shared.sendVideoConfig(rid: rid, width: ew, height: eh, avcc: avcc) }
+        }
+        encoder = enc
+        if RemoteTabHost.recording == nil, RPScreenRecorder.shared().isAvailable, let geo = showOnScreen() {
+            let pipe = ScreenPipeline(encoder: enc)
+            pipe.setGeometry(x1: geo.x1, y0: geo.y0, k: geo.k, winWidth: geo.winWidth)
+            pipeline = pipe
+            enc.onFrame = { @Sendable data, key in
                 Task { @MainActor in
-                    guard let self = self, !self.closed else { return }
-                    self.pendingSends += 1
-                    NovaLink.shared.sendVideoFrame(rid: rid, key: key, data: data) { [weak self] in
-                        Task { @MainActor in if let self = self { self.pendingSends = max(0, self.pendingSends - 1) } }
-                    }
+                    NovaLink.shared.sendVideoFrame(rid: rid, key: key, data: data) { pipe.sendDone() }
                 }
             }
-            encoder = enc
-            let link = CADisplayLink(target: DisplayLinkProxy { [weak self] in self?.videoTick() }, selector: #selector(DisplayLinkProxy.fire))
-            if #available(iOS 15.0, *) {
-                link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
-            } else {
-                link.preferredFramesPerSecond = 60
-            }
-            link.add(to: .main, forMode: .common)
-            displayLink = link
+            RemoteTabHost.recording = self
+            let rec = RPScreenRecorder.shared()
+            rec.isMicrophoneEnabled = false
+            rec.startCapture(handler: { sample, type, _ in
+                if type == .video { pipe.process(sample) }
+            }, completionHandler: { error in
+                guard error != nil else { return }
+                Task { @MainActor [weak self] in
+                    guard let self = self, !self.closed else { return }
+                    NovaLink.shared.flash("Sin permiso para grabar la pantalla: modo lento (30 fps).")
+                    if RemoteTabHost.recording === self { RemoteTabHost.recording = nil }
+                    self.pipeline = nil
+                    self.attach()
+                    self.startDrawLoop()
+                }
+            })
         } else {
-            mode = "jpeg"
-            frameTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.captureFrame() }
+            startDrawLoop()
+        }
+    }
+
+    /// Modo lento (sin grabación de pantalla): dibuja la página oculta en el búfer del codificador.
+    private func startDrawLoop() {
+        guard let enc = encoder else { startJPEG(); return }
+        let rid = id
+        enc.onFrame = { @Sendable [weak self] data, key in
+            Task { @MainActor in
+                guard let self = self, !self.closed else { return }
+                self.pendingSends += 1
+                NovaLink.shared.sendVideoFrame(rid: rid, key: key, data: data) { [weak self] in
+                    Task { @MainActor in if let self = self { self.pendingSends = max(0, self.pendingSends - 1) } }
+                }
             }
+        }
+        enc.forceKey = true
+        let link = CADisplayLink(target: DisplayLinkProxy { [weak self] in self?.videoTick() }, selector: #selector(DisplayLinkProxy.fire))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+    }
+
+    private func startJPEG() {
+        mode = "jpeg"
+        frameTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.captureFrame() }
         }
     }
 
     private func stopCapture() {
         displayLink?.invalidate(); displayLink = nil
         frameTimer?.invalidate(); frameTimer = nil
+        if RemoteTabHost.recording === self {
+            RPScreenRecorder.shared().stopCapture(handler: nil)
+            RemoteTabHost.recording = nil
+        }
+        pipeline = nil
         encoder?.invalidate(); encoder = nil
         pendingSends = 0
         inFlight = false
@@ -177,17 +269,15 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         mode = m == "jpeg" ? "jpeg" : "h264"
         outW = max(960, min(1920, width)) & ~1
         outH = (outW * 800 / 1280) & ~1
+        attach()
         startCapture()
     }
 
     func requestKeyFrame() { encoder?.forceKey = true }
 
-    /// Un fotograma de vídeo: dibuja la página en un búfer del codificador (sin copias extra).
     private func videoTick() {
         guard !closed, let enc = encoder, webView.superview != nil else { return }
-        // Si la wifi va justa, se salta el fotograma en vez de acumular retraso.
         if pendingSends > 2 { return }
-        // Ritmo adaptativo: si pintar cuesta mucho al iPhone, baja a 30 fps para no congelar Nova.
         skip.toggle()
         if halfRate && skip { return }
         let t0 = CACurrentMediaTime()
@@ -202,14 +292,11 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         if let ctx = CGContext(data: CVPixelBufferGetBaseAddress(pb), width: w, height: h, bitsPerComponent: 8,
                                bytesPerRow: CVPixelBufferGetBytesPerRow(pb), space: CGColorSpaceCreateDeviceRGB(),
                                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
-            ctx.setFillColor(UIColor.white.cgColor)
-            ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
             ctx.translateBy(x: 0, y: CGFloat(h))
-            let b = webView.bounds
-            ctx.scaleBy(x: CGFloat(w) / b.width, y: -CGFloat(h) / b.height)
+            ctx.scaleBy(x: CGFloat(w) / 1280, y: -CGFloat(h) / 800)
             ctx.interpolationQuality = .low
             UIGraphicsPushContext(ctx)
-            webView.drawHierarchy(in: b, afterScreenUpdates: false)
+            webView.drawHierarchy(in: CGRect(x: 0, y: 0, width: 1280, height: 800), afterScreenUpdates: false)
             UIGraphicsPopContext()
         }
         CVPixelBufferUnlockBaseAddress(pb, [])
@@ -223,7 +310,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         inFlight = true
         sentAt = Date()
         let cfg = WKSnapshotConfiguration()
-        cfg.rect = webView.bounds
+        cfg.rect = CGRect(x: 0, y: 0, width: 1280, height: 800)
         cfg.snapshotWidth = NSNumber(value: Double(outW) / Double(max(1, UIScreen.main.scale)))
         webView.takeSnapshot(with: cfg) { [weak self] image, _ in
             let jpeg = image?.jpegData(compressionQuality: 0.8)
@@ -240,7 +327,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
 
     private func sendStats() {
         guard !closed else { return }
-        fps = frames
+        fps = frames + (pipeline?.takeFrames() ?? 0)
         frames = 0
         let dev = UIDevice.current
         let level = dev.batteryLevel
@@ -255,7 +342,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         }
         let stats: [String: Any] = ["memMB": RemoteTabHost.appMemoryMB(), "battery": level < 0 ? -1 : Int(level * 100),
                                     "charging": charging, "fps": fps, "thermal": thermal,
-                                    "mode": mode, "width": outW, "height": outH]
+                                    "mode": pipeline != nil ? "pantalla" : mode, "width": outW, "height": outH]
         NovaLink.shared.send(["t": "rtab:stats", "rid": id, "title": webView.title ?? "", "url": webView.url?.absoluteString ?? urlText,
                               "canBack": webView.canGoBack, "canForward": webView.canGoForward, "stats": stats])
     }
@@ -358,6 +445,7 @@ final class RemoteTabHost: NSObject, ObservableObject, Identifiable {
         webView.loadHTMLString("", baseURL: nil)
         webView.removeFromSuperview()
         if notify { NovaLink.shared.send(["t": "rtab:closed", "rid": id]) }
+        onScreen = false
     }
 }
 
