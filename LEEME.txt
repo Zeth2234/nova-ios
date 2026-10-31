@@ -181,3 +181,9 @@ Copia de lo anterior en _backup-cuenta-antes/ (no hace falta subirla a GitHub).
   pronombres, descripción, sobre mí, 3 campos, colores, decoración y privacidad.
 - Mientras Nova está abierta tus amigos te ven "En línea"; al salir pasa a desconectado.
 - Pendiente (se hace desde Windows): estilo del nombre, fotos animadas (GIF) y crear/editar grupos.
+
+== v88 · Dispositivos (enlace con Nova para Windows) ==
+Archivos NUEVOS (subir dentro de Nova/): NovaLink.swift, NovaLinkHost.swift, NovaDevicesView.swift
+Cambiados: Nova/ContentView.swift, Nova/BrowserModel.swift, Nova/AppPanelViews.swift y project.yml (raíz).
+Entrada: panel lateral → «Dispositivos». Necesita la misma cuenta y la misma wifi que el PC.
+Copia de seguridad: _backup-enlace-antes/
